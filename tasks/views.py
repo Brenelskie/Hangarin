@@ -1,3 +1,6 @@
+import hashlib
+import json
+import secrets
 from urllib.parse import urlencode, urlsplit
 
 from django.contrib import messages
@@ -5,6 +8,7 @@ from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib.auth.views import LogoutView
 from django.core.exceptions import ImproperlyConfigured
 from django.core.paginator import InvalidPage
+from django.db import transaction
 from django.db.models import Count, Q
 from django.db.models.deletion import ProtectedError
 from django.urls import reverse
@@ -436,19 +440,58 @@ class TaskDeleteView(EntityDeleteView):
     model = Task
     entity_label = "Task"
     default_success_url = "task-list"
+    snapshot_field = "related_snapshot"
+    confirmation_stale_message = (
+        "Related notes or subtasks changed since this confirmation opened. "
+        "Review the updated related records, then confirm deletion again."
+    )
 
-    def get_queryset(self):
-        return super().get_queryset().annotate(
-            note_count=Count("notes", distinct=True),
-            subtask_count=Count("subtasks", distinct=True),
+    def get_related_snapshot(self, *, lock=False):
+        notes = self.object.notes.order_by("pk")
+        subtasks = self.object.subtasks.order_by("pk")
+        if lock:
+            notes = notes.select_for_update()
+            subtasks = subtasks.select_for_update()
+        note_ids = list(notes.values_list("pk", flat=True))
+        subtask_ids = list(subtasks.values_list("pk", flat=True))
+        disclosed_ids = json.dumps(
+            {"notes": note_ids, "subtasks": subtask_ids},
+            separators=(",", ":"),
+            sort_keys=True,
         )
+        return {
+            "digest": hashlib.sha256(disclosed_ids.encode()).hexdigest(),
+            "note_count": len(note_ids),
+            "subtask_count": len(subtask_ids),
+        }
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        context["note_count"] = self.object.note_count
-        context["subtask_count"] = self.object.subtask_count
+        snapshot = getattr(self, "related_snapshot", None)
+        if snapshot is None:
+            snapshot = self.get_related_snapshot()
+        context["related_snapshot"] = snapshot["digest"]
+        context["note_count"] = snapshot["note_count"]
+        context["subtask_count"] = snapshot["subtask_count"]
         context["cascade_delete"] = True
+        context["confirmation_stale_message"] = self.confirmation_stale_message
         return context
+
+    def form_valid(self, form):
+        submitted_snapshot = self.request.POST.get(self.snapshot_field, "")
+        with transaction.atomic():
+            self.object = Task.objects.select_for_update().get(pk=self.object.pk)
+            self.related_snapshot = self.get_related_snapshot(lock=True)
+            if not secrets.compare_digest(
+                submitted_snapshot,
+                self.related_snapshot["digest"],
+            ):
+                context = self.get_context_data(
+                    form=form,
+                    confirmation_stale=True,
+                )
+                return self.render_to_response(context, status=409)
+            return super().form_valid(form)
 
 
 class PriorityDeleteView(EntityDeleteView):

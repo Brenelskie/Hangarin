@@ -13,7 +13,7 @@
 <div class="child-grid">
     <section class="card" aria-labelledby="subtasks-title">
         <div class="section-heading"><div><p class="eyebrow">Break it down</p><h2 id="subtasks-title">Subtasks</h2></div><a class="button button-small" href="{% url 'subtask-add' %}?next={% url 'task-detail' task.pk %}">Add subtask</a></div>
-        {% if task.subtasks.all %}<ul class="child-list">{% for subtask in task.subtasks.all %}<li><span><strong>{{ subtask.title }}</strong><small>{{ subtask.status }}</small></span><span class="row-actions"><a href="{% url 'subtask-edit' subtask.pk %}?next={% url 'task-detail' task.pk %}">Edit</a><a class="danger-link" href="{% url 'subtask-delete' subtask.pk %}?next={% url 'task-detail' task.pk %}">Delete</a></span></li>{% empty %}<li class="empty-list">No subtasks yet.</li>{% endfor %}</ul>{% endif %}
+        <ul class="child-list">{% for subtask in task.subtasks.all %}<li><span><strong>{{ subtask.title }}</strong><small>{{ subtask.status }}</small></span><span class="row-actions"><a href="{% url 'subtask-edit' subtask.pk %}?next={% url 'task-detail' task.pk %}">Edit</a><a class="danger-link" href="{% url 'subtask-delete' subtask.pk %}?next={% url 'task-detail' task.pk %}">Delete</a></span></li>{% empty %}<li class="empty-list">No subtasks yet.</li>{% endfor %}</ul>
     </section>
     <section class="card" aria-labelledby="notes-title">
         <div class="section-heading"><div><p class="eyebrow">Keep context</p><h2 id="notes-title">Notes</h2></div><a class="button button-small" href="{% url 'note-add' %}?next={% url 'task-detail' task.pk %}">Add note</a></div>

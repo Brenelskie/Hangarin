@@ -292,6 +292,22 @@ class TaskQueryContractTests(TestCase):
         self.assertEqual(response.context["cancel_url"], reverse("note-list"))
         self.assertEqual(Task.objects.count(), task_count)
 
+    def test_same_host_return_outside_hangarin_routes_is_rejected(self):
+        response = self.client.get(reverse("note-add"), {"next": "/admin/"})
+
+        self.assertEqual(response.context["cancel_url"], reverse("note-list"))
+        self.assertEqual(response.context["return_url"], "")
+
+        created = self.client.post(
+            reverse("note-add"),
+            {
+                "task": Task.objects.get(title="Write database report").pk,
+                "content": "Stay inside Hangarin",
+                "next": "/admin/",
+            },
+        )
+        self.assertRedirects(created, reverse("note-list"))
+
     def test_child_create_can_return_to_its_task_detail(self):
         task = Task.objects.get(title="Write database report")
         return_url = reverse("task-detail", args=(task.pk,))
@@ -328,11 +344,70 @@ class TaskQueryContractTests(TestCase):
         self.assertEqual(get_response.context["subtask_count"], 1)
         self.assertTrue(Task.objects.filter(pk=task.pk).exists())
 
-        post_response = self.client.post(delete_url)
+        post_response = self.client.post(
+            delete_url,
+            {"related_snapshot": get_response.context["related_snapshot"]},
+        )
         self.assertRedirects(post_response, reverse("task-list"))
         self.assertFalse(Task.objects.filter(pk=task.pk).exists())
         self.assertFalse(Note.objects.filter(pk=note.pk).exists())
         self.assertFalse(SubTask.objects.filter(pk=subtask.pk).exists())
+
+    def test_task_delete_requires_confirmation_again_when_children_change(self):
+        task = Task.objects.get(title="Write database report")
+        existing_note = Note.objects.create(task=task, content="Initially disclosed")
+        delete_url = reverse("task-delete", args=(task.pk,))
+        return_url = reverse("dashboard")
+        confirmation = self.client.get(delete_url, {"next": return_url})
+
+        added_note = Note.objects.create(task=task, content="Added after confirmation")
+        added_subtask = SubTask.objects.create(
+            title="Also added after confirmation",
+            parent_task=task,
+        )
+        stale_response = self.client.post(
+            delete_url,
+            {
+                "next": confirmation.context["return_url"],
+                "related_snapshot": confirmation.context["related_snapshot"],
+            },
+        )
+
+        self.assertEqual(stale_response.status_code, 409)
+        self.assertTrue(stale_response.context["confirmation_stale"])
+        self.assertTrue(
+            "Review the updated related records, then confirm deletion again."
+            in stale_response.context["confirmation_stale_message"]
+        )
+        self.assertEqual(stale_response.context["note_count"], 2)
+        self.assertEqual(stale_response.context["subtask_count"], 1)
+        self.assertTrue(Task.objects.filter(pk=task.pk).exists())
+        self.assertTrue(Note.objects.filter(pk=existing_note.pk).exists())
+        self.assertTrue(Note.objects.filter(pk=added_note.pk).exists())
+        self.assertTrue(SubTask.objects.filter(pk=added_subtask.pk).exists())
+
+        renewed_response = self.client.post(
+            delete_url,
+            {
+                "next": stale_response.context["return_url"],
+                "related_snapshot": stale_response.context["related_snapshot"],
+            },
+        )
+
+        self.assertRedirects(renewed_response, return_url)
+        self.assertFalse(Task.objects.filter(pk=task.pk).exists())
+        self.assertFalse(Note.objects.filter(task_id=task.pk).exists())
+        self.assertFalse(SubTask.objects.filter(parent_task_id=task.pk).exists())
+
+    def test_task_delete_missing_or_tampered_snapshot_fails_closed(self):
+        task = Task.objects.get(title="Write database report")
+        delete_url = reverse("task-delete", args=(task.pk,))
+
+        for payload in ({}, {"related_snapshot": "tampered"}):
+            with self.subTest(payload=payload):
+                response = self.client.post(delete_url, payload)
+                self.assertEqual(response.status_code, 409)
+                self.assertTrue(Task.objects.filter(pk=task.pk).exists())
 
     def test_referenced_lookup_delete_is_friendly_and_non_destructive(self):
         task_ids = set(Task.objects.values_list("pk", flat=True))
@@ -578,6 +653,11 @@ class TaskInterfaceTests(TestCase):
             f'{reverse("subtask-add")}?next={return_url}',
         )
 
+    def test_task_detail_renders_empty_subtask_state(self):
+        response = self.client.get(reverse("task-detail", args=(self.task.pk,)))
+
+        self.assertContains(response, "No subtasks yet.")
+
     def test_delete_confirmation_explains_shared_relationship_impact(self):
         Note.objects.create(task=self.task, content="Will be removed")
         SubTask.objects.create(title="Will be removed", parent_task=self.task)
@@ -592,8 +672,18 @@ class TaskInterfaceTests(TestCase):
         self.assertContains(task_response, "1 note")
         self.assertContains(task_response, "1 subtask")
         self.assertContains(task_response, "shared workspace")
+        self.assertContains(task_response, 'name="related_snapshot"')
         self.assertContains(priority_response, "cannot be deleted")
         self.assertContains(priority_response, "1 task")
+
+        stale_response = self.client.post(
+            reverse("task-delete", args=(self.task.pk,))
+        )
+        self.assertContains(
+            stale_response,
+            "Review the updated related records, then confirm deletion again.",
+            status_code=409,
+        )
 
     def test_production_error_templates_are_branded_and_dependency_light(self):
         from django.template.loader import render_to_string

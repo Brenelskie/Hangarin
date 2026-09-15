@@ -7,9 +7,11 @@
     <h2>{{ object }}</h2>
     {% if protected_delete %}<p>This {{ entity_label|lower }} is used by <strong>{{ task_count }} task{{ task_count|pluralize }}</strong>. Referenced lookup values cannot be deleted until those tasks use another value.</p>{% elif cascade_delete %}<p>This removes the Task and its <strong>{{ note_count }} note{{ note_count|pluralize }}</strong> and <strong>{{ subtask_count }} subtask{{ subtask_count|pluralize }}</strong> from the shared workspace.</p>{% else %}<p>This record will be removed from the shared workspace. This action cannot be undone.</p>{% endif %}
     {% if blocked %}<div class="message message-error" role="status">Deletion was blocked because this value is still in use.</div>{% endif %}
+    {% if confirmation_stale %}<div class="message message-error" role="status">{{ confirmation_stale_message }}</div>{% endif %}
     <form method="post" class="form-actions">
         {% csrf_token %}
         {% if return_url %}<input type="hidden" name="next" value="{{ return_url }}">{% endif %}
+        {% if cascade_delete %}<input type="hidden" name="related_snapshot" value="{{ related_snapshot }}">{% endif %}
         <button class="button button-danger" type="submit">Delete {{ entity_label|lower }}</button><a class="button button-secondary" href="{{ cancel_url }}">Cancel</a>
     </form>
 </section>
