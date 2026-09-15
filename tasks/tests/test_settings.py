@@ -66,17 +66,15 @@ class ProductionSettingsTests(SimpleTestCase):
     @staticmethod
     def production_environment(**values):
         environment = os.environ.copy()
-        for key in (
-            "DJANGO_SECRET_KEY",
-            "DJANGO_ALLOWED_HOSTS",
-            "DJANGO_CSRF_TRUSTED_ORIGINS",
-            "DJANGO_DEBUG",
-        ):
-            environment.pop(key, None)
         environment.update(
             {
                 "DJANGO_ENV": "production",
+                "DJANGO_SECRET_KEY": "",
                 "DJANGO_DEBUG": "False",
+                "DJANGO_ALLOWED_HOSTS": "",
+                "DJANGO_CSRF_TRUSTED_ORIGINS": "",
+                "DJANGO_ENABLE_HSTS": "False",
+                "HANGARIN_ALLOW_PRODUCTION_SEED": "False",
                 **values,
             }
         )
