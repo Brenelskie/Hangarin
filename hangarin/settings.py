@@ -40,6 +40,7 @@ def env_list(name, default=()):
 
 ENVIRONMENT = os.getenv("DJANGO_ENV", "development").strip().lower()
 IS_PRODUCTION = ENVIRONMENT == "production"
+ALLOW_PRODUCTION_SEED = env_bool("HANGARIN_ALLOW_PRODUCTION_SEED", default=False)
 
 SECRET_KEY = os.getenv("DJANGO_SECRET_KEY", "")
 if IS_PRODUCTION and (

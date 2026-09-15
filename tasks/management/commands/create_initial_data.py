@@ -1,3 +1,4 @@
+from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
 from django.utils import timezone
@@ -18,6 +19,13 @@ class Command(BaseCommand):
     help = "Create deterministic Hangarin demo tasks after required lookups exist."
 
     def handle(self, *args, **options):
+        if settings.IS_PRODUCTION and not settings.ALLOW_PRODUCTION_SEED:
+            raise CommandError(
+                "Demo generation is disabled in production. Set "
+                "HANGARIN_ALLOW_PRODUCTION_SEED=True only for a reviewed, "
+                "empty first launch, then set it back to False."
+            )
+
         existing_counts = self._demo_counts()
         if any(existing_counts):
             self.stdout.write(

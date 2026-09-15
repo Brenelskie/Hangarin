@@ -5,7 +5,7 @@ from unittest.mock import patch
 
 from django.core.management import call_command
 from django.core.management.base import CommandError
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.utils import timezone
 
 from tasks.models import Category, Note, Priority, StatusChoices, SubTask, Task
@@ -27,6 +27,20 @@ class InitialDataCommandTests(TestCase):
         with redirect_stdout(output):
             call_command("create_initial_data")
         return output.getvalue()
+
+    @override_settings(IS_PRODUCTION=True, ALLOW_PRODUCTION_SEED=False)
+    def test_production_generation_requires_explicit_temporary_opt_in(self):
+        self.create_required_lookups()
+
+        with self.assertRaisesMessage(
+            CommandError,
+            "Demo generation is disabled in production",
+        ):
+            self.run_command()
+
+        self.assertEqual(Task.objects.count(), 0)
+        self.assertEqual(Note.objects.count(), 0)
+        self.assertEqual(SubTask.objects.count(), 0)
 
     def test_missing_lookups_fail_before_any_demo_write(self):
         Priority.objects.create(name="high")
