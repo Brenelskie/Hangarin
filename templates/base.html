@@ -1,0 +1,69 @@
+{% load static %}
+<!doctype html>
+<html lang="en" class="no-js">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content="light">
+    <title>{% block title %}Hangarin{% endblock %}</title>
+    <link rel="icon" href="{% static 'tasks/img/favicon.svg' %}" type="image/svg+xml">
+    <link rel="stylesheet" href="{% static 'tasks/css/hangarin.css' %}">
+    <script>document.documentElement.classList.replace('no-js', 'js');</script>
+    <script src="{% static 'tasks/js/hangarin.js' %}" defer></script>
+</head>
+<body class="{% if user.is_authenticated %}app-page{% else %}auth-page{% endif %}">
+    <a class="skip-link" href="#main-content">Skip to main content</a>
+    {% if user.is_authenticated %}
+        <div class="app-shell">
+            <aside class="sidebar" id="primary-navigation" aria-label="Primary navigation">
+                <a class="brand" href="{% url 'dashboard' %}" aria-label="Hangarin dashboard">
+                    <span class="brand-mark" aria-hidden="true"><span></span></span>
+                    <span><strong>Hangarin</strong><small>Turn aims into action</small></span>
+                </a>
+                <nav class="nav-links">
+                    <a href="{% url 'dashboard' %}" {% if request.resolver_match.url_name == 'dashboard' %}aria-current="page"{% endif %}>Dashboard</a>
+                    <a href="{% url 'task-list' %}" {% if 'task-' in request.resolver_match.url_name %}aria-current="page"{% endif %}>Tasks</a>
+                    <a href="{% url 'subtask-list' %}" {% if 'subtask-' in request.resolver_match.url_name %}aria-current="page"{% endif %}>Subtasks</a>
+                    <a href="{% url 'note-list' %}" {% if 'note-' in request.resolver_match.url_name %}aria-current="page"{% endif %}>Notes</a>
+                    <span class="nav-label">Organize</span>
+                    <a href="{% url 'priority-list' %}" {% if 'priority-' in request.resolver_match.url_name %}aria-current="page"{% endif %}>Priorities</a>
+                    <a href="{% url 'category-list' %}" {% if 'category-' in request.resolver_match.url_name %}aria-current="page"{% endif %}>Categories</a>
+                </nav>
+                <div class="shared-note">
+                    <strong>Shared workspace</strong>
+                    <span>Changes are visible to every signed-in Hangarin user.</span>
+                </div>
+                <div class="sidebar-user">
+                    <span class="avatar" aria-hidden="true">{{ user.username|first|upper }}</span>
+                    <span><strong>{{ user.get_full_name|default:user.username }}</strong><small>Signed in</small></span>
+                    <form action="{% url 'logout' %}" method="post">
+                        {% csrf_token %}
+                        <button class="text-button" type="submit">Log out</button>
+                    </form>
+                </div>
+            </aside>
+            <div class="workspace">
+                <header class="topbar">
+                    <button class="nav-toggle" id="nav-toggle" type="button" aria-controls="primary-navigation" aria-expanded="false">
+                        <span aria-hidden="true">☰</span><span>Menu</span>
+                    </button>
+                    <span class="topbar-kicker">Shared task workspace</span>
+                    <a class="topbar-action" href="{% url 'task-add' %}">Add task</a>
+                </header>
+                <main id="main-content" class="main-content" tabindex="-1">
+                    {% if messages %}
+                        <div class="message-stack" aria-live="polite">
+                            {% for message in messages %}<div class="message message-{{ message.tags|default:'info' }}" role="status">{{ message }}</div>{% endfor %}
+                        </div>
+                    {% endif %}
+                    {% block content %}{% endblock %}
+                </main>
+            </div>
+        </div>
+    {% else %}
+        <main id="main-content" class="auth-main" tabindex="-1">
+            {% block auth_content %}{% block content_public %}{% endblock %}{% endblock %}
+        </main>
+    {% endif %}
+</body>
+</html>

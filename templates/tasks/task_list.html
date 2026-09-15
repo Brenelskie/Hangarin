@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block title %}Tasks · Hangarin{% endblock %}
+{% block content %}
+<header class="page-heading"><div><p class="eyebrow">Shared work queue</p><h1>Tasks</h1><p>Search the plan, narrow the signal, and choose the next action.</p></div><a class="button button-primary" href="{% url 'task-add' %}">Add task</a></header>
+<section class="list-card card" aria-labelledby="task-results">
+    <form class="filter-bar filter-bar-wide" method="get">
+        <div class="filter-search"><label for="task-search">Search tasks</label><input id="task-search" type="search" name="q" value="{{ active_query.q|default:'' }}" maxlength="100" placeholder="Title or description"></div>
+        <div><label for="status-filter">Status</label><select id="status-filter" name="status"><option value="">All statuses</option>{% for value,label in statuses %}<option value="{{ value }}" {% if active_query.status == value %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></div>
+        <div><label for="priority-filter">Priority</label><select id="priority-filter" name="priority"><option value="">All priorities</option>{% for priority in priorities %}{% with pid=priority.pk|stringformat:"s" %}<option value="{{ priority.pk }}" {% if active_query.priority == pid %}selected{% endif %}>{{ priority }}</option>{% endwith %}{% endfor %}</select></div>
+        <div><label for="category-filter">Category</label><select id="category-filter" name="category"><option value="">All categories</option>{% for category in categories %}{% with cid=category.pk|stringformat:"s" %}<option value="{{ category.pk }}" {% if active_query.category == cid %}selected{% endif %}>{{ category }}</option>{% endwith %}{% endfor %}</select></div>
+        <div><label for="task-order">Order</label><select id="task-order" name="order"><option value="deadline" {% if active_query.order == 'deadline' %}selected{% endif %}>Deadline</option><option value="-deadline" {% if active_query.order == '-deadline' %}selected{% endif %}>Deadline, latest</option><option value="title" {% if active_query.order == 'title' %}selected{% endif %}>Title</option><option value="status" {% if active_query.order == 'status' %}selected{% endif %}>Status</option></select></div>
+        <button class="button button-secondary" type="submit">Apply</button>{% if active_query %}<a class="clear-link" href="{% url 'task-list' %}">Clear all</a>{% endif %}
+    </form>
+    <h2 id="task-results" class="sr-only">Task results</h2>
+    {% if tasks %}
+    <div class="table-scroll" tabindex="0" aria-label="Scrollable task table"><table><thead><tr><th>Task</th><th>Status</th><th>Deadline</th><th>Priority</th><th>Category</th><th class="actions-column">Actions</th></tr></thead><tbody>{% for task in tasks %}<tr><td><a class="record-link" href="{% url 'task-detail' task.pk %}">{{ task.title }}</a><small>{{ task.description|truncatechars:70 }}</small></td><td><span class="status status-{{ task.status|slugify }}">{{ task.status }}</span></td><td><time datetime="{{ task.deadline|date:'c' }}">{{ task.deadline|date:"M j, Y" }}</time></td><td>{{ task.priority }}</td><td>{{ task.category }}</td><td class="row-actions actions-column"><a href="{% url 'task-edit' task.pk %}?next={{ request.get_full_path|urlencode }}">Edit</a><a class="danger-link" href="{% url 'task-delete' task.pk %}?next={{ request.get_full_path|urlencode }}">Delete</a></td></tr>{% endfor %}</tbody></table></div>
+    {% elif database_empty %}<div class="empty-panel"><h3>No tasks yet.</h3><p>Create the first task to begin shaping the shared plan.</p><a class="button button-primary" href="{% url 'task-add' %}">Create your first task</a></div>
+    {% else %}<div class="empty-panel"><h3>No tasks match these filters.</h3><p>Adjust the search or clear every active filter.</p><a class="button button-secondary" href="{% url 'task-list' %}">Clear all</a></div>{% endif %}
+    {% include "includes/pagination.html" %}
+</section>
+{% endblock %}

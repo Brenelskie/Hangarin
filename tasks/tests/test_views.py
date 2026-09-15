@@ -2,6 +2,7 @@ from datetime import timedelta
 
 from django.contrib.auth import get_user_model
 from django.contrib.messages import get_messages
+from django.template.loader import get_template
 from django.test import TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
@@ -385,3 +386,225 @@ class TaskQueryContractTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertTrue(Note.objects.filter(pk=note.pk).exists())
+
+
+class InterfaceTemplateTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.user = get_user_model().objects.create_user("ui-user", password="secret123")
+        cls.priority = Priority.objects.create(name="high")
+        cls.category = Category.objects.create(name="School")
+        cls.task = Task.objects.create(
+            title="Present Hangarin",
+            description="Walk through the shared task workflow.",
+            deadline=timezone.now() + timedelta(days=1),
+            status=StatusChoices.IN_PROGRESS,
+            priority=cls.priority,
+            category=cls.category,
+        )
+        cls.note = Note.objects.create(task=cls.task, content="Explain the ERD")
+        cls.subtask = SubTask.objects.create(
+            title="Open dashboard", parent_task=cls.task
+        )
+
+    def setUp(self):
+        self.client.force_login(self.user)
+
+    def test_authenticated_shell_and_dashboard_render_product_contract(self):
+        response = self.client.get(reverse("dashboard"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Today’s horizon")
+        self.assertContains(response, "Shared workspace")
+        self.assertContains(response, "Changes are visible to every signed-in Hangarin user")
+        self.assertContains(response, 'aria-current="page"')
+        self.assertContains(response, 'action="/accounts/logout/"')
+        self.assertNotContains(response, "PSUSphere")
+
+    def test_task_list_renders_retained_controls_and_stable_action_column(self):
+        response = self.client.get(
+            reverse("task-list"),
+            {"q": "Present", "status": "In Progress", "order": "title"},
+        )
+
+        self.assertContains(response, 'value="Present"')
+        self.assertContains(response, 'value="In Progress" selected')
+        self.assertContains(response, 'value="title" selected')
+        self.assertContains(response, "actions-column")
+        self.assertContains(response, "Clear all")
+
+    def test_task_detail_links_child_actions_back_to_the_task(self):
+        response = self.client.get(reverse("task-detail", args=(self.task.pk,)))
+
+        return_path = reverse("task-detail", args=(self.task.pk,))
+        self.assertContains(response, "Explain the ERD")
+        self.assertContains(response, "Open dashboard")
+        self.assertContains(response, f"?next={return_path}", count=None)
+
+    def test_all_real_page_templates_render_without_syntax_errors(self):
+        pages = (
+            reverse("task-list"),
+            reverse("task-add"),
+            reverse("task-detail", args=(self.task.pk,)),
+            reverse("task-edit", args=(self.task.pk,)),
+            reverse("task-delete", args=(self.task.pk,)),
+            reverse("priority-list"),
+            reverse("priority-add"),
+            reverse("priority-delete", args=(self.priority.pk,)),
+            reverse("category-list"),
+            reverse("note-list"),
+            reverse("subtask-list"),
+        )
+        for page in pages:
+            with self.subTest(page=page):
+                response = self.client.get(page)
+                self.assertEqual(response.status_code, 200)
+                self.assertContains(response, "Hangarin")
+
+    def test_error_templates_are_dependency_light_and_branded(self):
+        for name, heading in (
+            ("403.html", "Access denied"),
+            ("404.html", "Page not found"),
+            ("500.html", "Something went wrong"),
+        ):
+            with self.subTest(template=name):
+                rendered = get_template(name).render({})
+                self.assertIn("Hangarin", rendered)
+                self.assertIn(heading, rendered)
+                self.assertNotIn("DEBUG", rendered)
+
+
+class TaskInterfaceTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.user = get_user_model().objects.create_user(
+            "interface-user", password="secret123"
+        )
+        cls.priority = Priority.objects.create(name="high")
+        cls.category = Category.objects.create(name="School")
+        cls.task = Task.objects.create(
+            title="Interface review",
+            description="Check the complete task workspace.",
+            deadline=timezone.now() + timedelta(days=1),
+            priority=cls.priority,
+            category=cls.category,
+        )
+
+    def setUp(self):
+        self.client.force_login(self.user)
+
+    def test_dashboard_prioritizes_deadline_queues_before_summary_counts(self):
+        overdue = Task.objects.create(
+            title="Overdue interface check",
+            description="Due before today.",
+            deadline=timezone.now() - timedelta(days=1),
+            priority=self.priority,
+            category=self.category,
+        )
+
+        response = self.client.get(reverse("dashboard"))
+        content = response.content.decode()
+
+        self.assertContains(response, overdue.title)
+        self.assertContains(response, "Add task")
+        self.assertContains(response, "Overdue")
+        self.assertContains(response, "Upcoming")
+        self.assertLess(content.index("Overdue"), content.index("Workspace totals"))
+        self.assertNotContains(response, "PSUSphere")
+
+    def test_task_list_retains_filters_and_pagination_query(self):
+        for index in range(11):
+            Task.objects.create(
+                title=f"Review item {index:02d}",
+                description="Interface pagination proof.",
+                deadline=timezone.now() + timedelta(days=index + 2),
+                status=StatusChoices.PENDING,
+                priority=self.priority,
+                category=self.category,
+            )
+
+        response = self.client.get(
+            reverse("task-list"),
+            {"q": "Review", "status": "Pending", "order": "title"},
+        )
+
+        self.assertContains(response, 'value="Review"')
+        self.assertContains(response, '<option value="Pending" selected>')
+        self.assertContains(response, '<option value="title" selected>')
+        self.assertContains(
+            response,
+            "?q=Review&amp;status=Pending&amp;order=title&amp;page=2",
+        )
+        self.assertContains(response, 'class="table-scroll"')
+
+    def test_filtered_and_database_empty_states_are_distinct(self):
+        filtered = self.client.get(reverse("task-list"), {"q": "not-present"})
+        self.assertContains(filtered, "No tasks match these filters")
+        self.assertContains(filtered, "Clear all")
+
+        Task.objects.all().delete()
+        database_empty = self.client.get(reverse("task-list"))
+        self.assertContains(database_empty, "No tasks yet")
+        self.assertContains(database_empty, "Create your first task")
+
+    def test_invalid_form_has_focused_linked_error_summary(self):
+        response = self.client.post(
+            reverse("task-add"),
+            {
+                "title": "",
+                "description": "Keep this text",
+                "deadline": "",
+                "status": StatusChoices.PENDING,
+                "priority": self.priority.pk,
+                "category": self.category.pk,
+            },
+        )
+
+        self.assertContains(response, 'id="error-summary"')
+        self.assertContains(response, 'data-autofocus="true"')
+        self.assertContains(response, 'href="#id_title"')
+        self.assertContains(response, 'aria-invalid="true"')
+
+    def test_task_detail_child_links_return_to_parent(self):
+        response = self.client.get(reverse("task-detail", args=(self.task.pk,)))
+        return_url = reverse("task-detail", args=(self.task.pk,))
+
+        self.assertContains(
+            response,
+            f'{reverse("note-add")}?next={return_url}',
+        )
+        self.assertContains(
+            response,
+            f'{reverse("subtask-add")}?next={return_url}',
+        )
+
+    def test_delete_confirmation_explains_shared_relationship_impact(self):
+        Note.objects.create(task=self.task, content="Will be removed")
+        SubTask.objects.create(title="Will be removed", parent_task=self.task)
+
+        task_response = self.client.get(
+            reverse("task-delete", args=(self.task.pk,))
+        )
+        priority_response = self.client.get(
+            reverse("priority-delete", args=(self.priority.pk,))
+        )
+
+        self.assertContains(task_response, "1 note")
+        self.assertContains(task_response, "1 subtask")
+        self.assertContains(task_response, "shared workspace")
+        self.assertContains(priority_response, "cannot be deleted")
+        self.assertContains(priority_response, "1 task")
+
+    def test_production_error_templates_are_branded_and_dependency_light(self):
+        from django.template.loader import render_to_string
+
+        for template_name, heading in (
+            ("403.html", "Access denied"),
+            ("404.html", "Page not found"),
+            ("500.html", "Something went wrong"),
+        ):
+            with self.subTest(template_name=template_name):
+                content = render_to_string(template_name)
+                self.assertIn("Hangarin", content)
+                self.assertIn(heading, content)
+                self.assertNotIn("traceback", content.lower())

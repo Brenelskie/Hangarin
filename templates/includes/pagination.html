@@ -1,0 +1,9 @@
+{% if is_paginated %}
+<nav class="pagination" aria-label="Results pages">
+    <span>Page {{ page_obj.number }} of {{ paginator.num_pages }}</span>
+    <div>
+        {% if page_obj.has_previous %}<a href="?{% if query_string %}{{ query_string }}&amp;{% endif %}page=1">First</a><a href="?{% if query_string %}{{ query_string }}&amp;{% endif %}page={{ page_obj.previous_page_number }}">Previous</a>{% endif %}
+        {% if page_obj.has_next %}<a href="?{% if query_string %}{{ query_string }}&amp;{% endif %}page={{ page_obj.next_page_number }}">Next</a><a href="?{% if query_string %}{{ query_string }}&amp;{% endif %}page={{ paginator.num_pages }}">Last</a>{% endif %}
+    </div>
+</nav>
+{% endif %}

@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block title %}Dashboard · Hangarin{% endblock %}
+{% block content %}
+<header class="page-heading dashboard-heading">
+    <div><p class="eyebrow">Today’s horizon</p><h1>Move the right work forward.</h1><p>Start with what is late, then make space for what comes next.</p></div>
+    <a class="button button-primary" href="{% url 'task-add' %}">Add task</a>
+</header>
+
+<section class="horizon-board" aria-labelledby="overdue-title">
+    <div class="horizon-line" aria-hidden="true"><span></span></div>
+    <div class="queue-column queue-overdue">
+        <div class="section-heading"><div><p class="eyebrow">Needs attention</p><h2 id="overdue-title">Overdue</h2></div><span class="count-badge">{{ overdue_tasks|length }}</span></div>
+        {% if overdue_tasks %}
+            <div class="task-stack">
+                {% for task in overdue_tasks %}
+                    <a class="task-strip" href="{% url 'task-detail' task.pk %}"><span><strong>{{ task.title }}</strong><small>{{ task.category }} · {{ task.priority }}</small></span><time datetime="{{ task.deadline|date:'c' }}">{{ task.deadline|date:"M j, g:i A" }}</time></a>
+                {% endfor %}
+            </div>
+        {% else %}<div class="empty-inline"><strong>Nothing overdue.</strong><span>Your active tasks are on schedule.</span></div>{% endif %}
+    </div>
+    <div class="queue-column">
+        <div class="section-heading"><div><p class="eyebrow">Next up</p><h2>Upcoming</h2></div><span class="count-badge">{{ upcoming_tasks|length }}</span></div>
+        {% if upcoming_tasks %}
+            <div class="task-stack">
+                {% for task in upcoming_tasks %}
+                    <a class="task-strip" href="{% url 'task-detail' task.pk %}"><span><strong>{{ task.title }}</strong><small>{{ task.category }} · {{ task.priority }}</small></span><time datetime="{{ task.deadline|date:'c' }}">{{ task.deadline|date:"M j, g:i A" }}</time></a>
+                {% endfor %}
+            </div>
+        {% else %}<div class="empty-inline"><strong>No upcoming work.</strong><span><a href="{% url 'task-add' %}">Add a task</a> when you are ready.</span></div>{% endif %}
+    </div>
+</section>
+
+<section class="metric-section" aria-labelledby="snapshot-title">
+    <div class="section-heading"><div><p class="eyebrow">Workspace totals</p><h2 id="snapshot-title">What the team is carrying</h2></div><a href="{% url 'task-list' %}">View all tasks</a></div>
+    <div class="metrics">
+        <article><span class="metric-value">{{ pending_count }}</span><strong>Pending</strong><small>Waiting to begin</small></article>
+        <article><span class="metric-value progress">{{ in_progress_count }}</span><strong>In progress</strong><small>Actively moving</small></article>
+        <article><span class="metric-value done">{{ completed_count }}</span><strong>Completed</strong><small>Finished work</small></article>
+        <article><span class="metric-value">{{ task_count }}</span><strong>All tasks</strong><small>{{ note_count }} notes · {{ subtask_count }} subtasks</small></article>
+    </div>
+</section>
+
+<section class="recent-section" aria-labelledby="recent-title">
+    <div class="section-heading"><div><p class="eyebrow">Latest movement</p><h2 id="recent-title">Recently updated</h2></div></div>
+    {% if recent_tasks %}<div class="recent-grid">{% for task in recent_tasks %}<a href="{% url 'task-detail' task.pk %}"><strong>{{ task.title }}</strong><span>{{ task.status }}</span><small>Updated {{ task.updated_at|timesince }} ago</small></a>{% endfor %}</div>{% else %}<div class="empty-panel"><h3>Your workspace is ready.</h3><p>Create the first task, then add notes and subtasks from its detail page.</p><a class="button button-primary" href="{% url 'task-add' %}">Create first task</a></div>{% endif %}
+    <div class="lookup-summary"><span>{{ priority_count }} priorities</span><span>{{ category_count }} categories</span><a href="{% url 'priority-list' %}">Manage setup</a></div>
+</section>
+{% endblock %}

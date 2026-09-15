@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block title %}{{ task.title }} · Hangarin{% endblock %}
+{% block content %}
+<nav class="breadcrumbs" aria-label="Breadcrumb"><a href="{% url 'task-list' %}">Tasks</a><span aria-hidden="true">/</span><span aria-current="page">Details</span></nav>
+<header class="page-heading detail-heading">
+    <div><p class="eyebrow">Task detail</p><h1>{{ task.title }}</h1><div class="status-row"><span class="status status-{{ task.status|slugify }}">{{ task.status }}</span><span>{{ task.priority }} priority</span><span>{{ task.category }}</span></div></div>
+    <div class="button-row"><a class="button button-secondary" href="{% url 'task-edit' task.pk %}">Edit task</a><a class="button button-danger-quiet" href="{% url 'task-delete' task.pk %}">Delete</a></div>
+</header>
+<div class="detail-grid">
+    <section class="detail-main card" aria-labelledby="description-title"><p class="eyebrow">Due {{ task.deadline|date:"M j, Y · g:i A" }}</p><h2 id="description-title">Description</h2><div class="prose">{{ task.description|linebreaks }}</div></section>
+    <aside class="detail-meta card" aria-label="Task dates"><dl><div><dt>Created</dt><dd>{{ task.created_at|date:"M j, Y" }}</dd></div><div><dt>Last updated</dt><dd>{{ task.updated_at|date:"M j, Y · g:i A" }}</dd></div></dl></aside>
+</div>
+<div class="child-grid">
+    <section class="card" aria-labelledby="subtasks-title">
+        <div class="section-heading"><div><p class="eyebrow">Break it down</p><h2 id="subtasks-title">Subtasks</h2></div><a class="button button-small" href="{% url 'subtask-add' %}?next={% url 'task-detail' task.pk %}">Add subtask</a></div>
+        {% if task.subtasks.all %}<ul class="child-list">{% for subtask in task.subtasks.all %}<li><span><strong>{{ subtask.title }}</strong><small>{{ subtask.status }}</small></span><span class="row-actions"><a href="{% url 'subtask-edit' subtask.pk %}?next={% url 'task-detail' task.pk %}">Edit</a><a class="danger-link" href="{% url 'subtask-delete' subtask.pk %}?next={% url 'task-detail' task.pk %}">Delete</a></span></li>{% empty %}<li class="empty-list">No subtasks yet.</li>{% endfor %}</ul>{% endif %}
+    </section>
+    <section class="card" aria-labelledby="notes-title">
+        <div class="section-heading"><div><p class="eyebrow">Keep context</p><h2 id="notes-title">Notes</h2></div><a class="button button-small" href="{% url 'note-add' %}?next={% url 'task-detail' task.pk %}">Add note</a></div>
+        <ul class="child-list note-list">{% for note in task.notes.all %}<li><span><strong>{{ note.content|truncatechars:100 }}</strong><small>{{ note.created_at|date:"M j, g:i A" }}</small></span><span class="row-actions"><a href="{% url 'note-edit' note.pk %}?next={% url 'task-detail' task.pk %}">Edit</a><a class="danger-link" href="{% url 'note-delete' note.pk %}?next={% url 'task-detail' task.pk %}">Delete</a></span></li>{% empty %}<li class="empty-list">No notes yet.</li>{% endfor %}</ul>
+    </section>
+</div>
+{% endblock %}

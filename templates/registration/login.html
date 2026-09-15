@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block title %}Sign in · Hangarin{% endblock %}
+{% block auth_content %}
+<div class="login-layout">
+    <section class="login-story" aria-labelledby="login-story-title">
+        <a class="brand brand-light" href="{% url 'login' %}">
+            <span class="brand-mark" aria-hidden="true"><span></span></span>
+            <span><strong>Hangarin</strong><small>Turn aims into action</small></span>
+        </a>
+        <div class="horizon-art" aria-hidden="true"><span></span><span></span><span></span></div>
+        <div class="story-copy">
+            <p class="eyebrow">A clearer path forward</p>
+            <h1 id="login-story-title">Give every goal a next step.</h1>
+            <p>Keep deadlines, notes, and smaller actions together in one shared workspace.</p>
+        </div>
+    </section>
+    <section class="login-panel" aria-labelledby="login-title">
+        <div class="login-card">
+            <p class="eyebrow">Welcome back</p>
+            <h2 id="login-title">Sign in to Hangarin</h2>
+            <p class="muted">Use the account provided by your Hangarin administrator.</p>
+            <form method="post" action="{% url 'login' %}" class="stack-form" novalidate>
+                {% csrf_token %}
+                {% if next %}<input type="hidden" name="next" value="{{ next }}">{% endif %}
+                {% include "includes/form_fields.html" with form=form %}
+                <button class="button button-primary button-wide" type="submit">Sign in</button>
+            </form>
+            <p class="login-help">Accounts are created by staff. Public registration and social login are not enabled.</p>
+        </div>
+    </section>
+</div>
+{% endblock %}

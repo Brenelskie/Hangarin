@@ -1,0 +1,18 @@
+{% if form.non_field_errors or form.errors %}
+    <div class="error-summary" id="error-summary" role="alert" tabindex="-1" data-error-summary data-autofocus="true">
+        <strong>Check the highlighted fields.</strong>
+        <ul>
+            {% for error in form.non_field_errors %}<li>{{ error }}</li>{% endfor %}
+            {% for field in form %}{% if field.errors %}<li><a href="#{{ field.id_for_label }}">{{ field.label }}: {{ field.errors|join:", " }}</a></li>{% endif %}{% endfor %}
+        </ul>
+    </div>
+{% endif %}
+{% for hidden in form.hidden_fields %}{{ hidden }}{% endfor %}
+{% for field in form.visible_fields %}
+    <div class="field{% if field.errors %} field-error{% endif %}">
+        <label for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %}<span aria-hidden="true"> *</span><span class="sr-only"> required</span>{% endif %}</label>
+        {{ field }}
+        {% if field.help_text %}<div class="field-help" id="{{ field.id_for_label }}-help">{{ field.help_text|safe }}</div>{% endif %}
+        {% if field.errors %}<div class="field-errors" id="{{ field.id_for_label }}-errors">{{ field.errors }}</div>{% endif %}
+    </div>
+{% endfor %}

@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block title %}{% if object %}Edit{% else %}Add{% endif %} {{ entity_label }} · Hangarin{% endblock %}
+{% block content %}
+<nav class="breadcrumbs" aria-label="Breadcrumb"><a href="{{ cancel_url }}">Back</a><span aria-hidden="true">/</span><span aria-current="page">{% if object %}Edit{% else %}Add{% endif %} {{ entity_label|lower }}</span></nav>
+<header class="page-heading compact-heading"><div><p class="eyebrow">{% if object %}Update record{% else %}New record{% endif %}</p><h1>{% if object %}Edit{% else %}Add{% endif %} {{ entity_label }}</h1><p>Fields marked with an asterisk are required.</p></div></header>
+<section class="form-card card">
+    <form method="post" class="stack-form" novalidate>
+        {% csrf_token %}
+        {% if return_url %}<input type="hidden" name="next" value="{{ return_url }}">{% endif %}
+        {% include "includes/form_fields.html" with form=form %}
+        <div class="form-actions"><button class="button button-primary" type="submit">Save {{ entity_label|lower }}</button><a class="button button-secondary" href="{{ cancel_url }}">Cancel</a></div>
+    </form>
+</section>
+{% endblock %}

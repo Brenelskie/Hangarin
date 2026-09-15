@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block title %}Delete {{ entity_label }} · Hangarin{% endblock %}
+{% block content %}
+<nav class="breadcrumbs" aria-label="Breadcrumb"><a href="{{ cancel_url }}">Back</a><span aria-hidden="true">/</span><span aria-current="page">Delete {{ entity_label|lower }}</span></nav>
+<header class="page-heading compact-heading"><div><p class="eyebrow danger-eyebrow">Confirm action</p><h1>Delete {{ entity_label|lower }}?</h1></div></header>
+<section class="confirm-card card{% if blocked %} blocked-card{% endif %}">
+    <h2>{{ object }}</h2>
+    {% if protected_delete %}<p>This {{ entity_label|lower }} is used by <strong>{{ task_count }} task{{ task_count|pluralize }}</strong>. Referenced lookup values cannot be deleted until those tasks use another value.</p>{% elif cascade_delete %}<p>This removes the Task and its <strong>{{ note_count }} note{{ note_count|pluralize }}</strong> and <strong>{{ subtask_count }} subtask{{ subtask_count|pluralize }}</strong> from the shared workspace.</p>{% else %}<p>This record will be removed from the shared workspace. This action cannot be undone.</p>{% endif %}
+    {% if blocked %}<div class="message message-error" role="status">Deletion was blocked because this value is still in use.</div>{% endif %}
+    <form method="post" class="form-actions">
+        {% csrf_token %}
+        {% if return_url %}<input type="hidden" name="next" value="{{ return_url }}">{% endif %}
+        <button class="button button-danger" type="submit">Delete {{ entity_label|lower }}</button><a class="button button-secondary" href="{{ cancel_url }}">Cancel</a>
+    </form>
+</section>
+{% endblock %}

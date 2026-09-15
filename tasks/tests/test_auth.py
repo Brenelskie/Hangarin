@@ -275,3 +275,47 @@ class AuthenticationContractTests(TestCase):
             ),
             original_counts,
         )
+
+
+class LoginInterfaceTests(TestCase):
+    def test_login_is_hangarin_branded_and_local_account_only(self):
+        response = self.client.get(reverse("login"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Hangarin")
+        self.assertContains(response, "Give every goal a next step")
+        self.assertContains(response, "Public registration and social login are not enabled")
+        self.assertContains(response, "Skip to main content")
+        self.assertNotContains(response, "PSUSphere")
+        self.assertNotContains(response, "Continue with Google")
+        self.assertNotContains(response, "Continue with GitHub")
+
+
+class AuthenticationInterfaceTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.user = get_user_model().objects.create_user(
+            "student", password="secret123"
+        )
+
+    def test_login_uses_hangarin_brand_without_social_or_psusphere_copy(self):
+        response = self.client.get(reverse("login"))
+
+        self.assertContains(response, "Hangarin")
+        self.assertContains(response, 'href="#main-content"')
+        self.assertContains(response, "hangarin.css")
+        self.assertNotContains(response, "PSUSphere")
+        self.assertNotContains(response, "Continue with Google")
+        self.assertNotContains(response, "Continue with GitHub")
+
+    def test_authenticated_shell_exposes_shared_context_and_post_logout(self):
+        self.client.force_login(self.user)
+
+        response = self.client.get(reverse("dashboard"))
+
+        self.assertContains(response, "Shared workspace")
+        self.assertContains(response, 'action="%s"' % reverse("logout"))
+        self.assertContains(response, 'aria-current="page"')
+        self.assertContains(response, 'aria-controls="primary-navigation"')
+        self.assertContains(response, 'aria-expanded="false"')
+        self.assertContains(response, "hangarin.js")
