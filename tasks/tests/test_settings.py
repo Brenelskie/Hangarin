@@ -73,7 +73,13 @@ class ProductionSettingsTests(SimpleTestCase):
             "DJANGO_DEBUG",
         ):
             environment.pop(key, None)
-        environment.update({"DJANGO_ENV": "production", **values})
+        environment.update(
+            {
+                "DJANGO_ENV": "production",
+                "DJANGO_DEBUG": "False",
+                **values,
+            }
+        )
         return environment
 
     @classmethod
