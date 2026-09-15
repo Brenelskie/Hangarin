@@ -10,8 +10,11 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/6.1/ref/settings/
 """
 
+import ipaddress
 import os
+import re
 from pathlib import Path
+from urllib.parse import urlsplit
 
 from django.core.exceptions import ImproperlyConfigured
 from dotenv import load_dotenv
@@ -33,6 +36,56 @@ def env_list(name, default=()):
     if value is None:
         return list(default)
     return [item.strip() for item in value.split(",") if item.strip()]
+
+
+_HOST_LABEL_RE = re.compile(
+    r"[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?", re.IGNORECASE
+)
+
+
+def _is_hostname_pattern(value):
+    """Accept a hostname or Django's leading-dot subdomain pattern, never a URL."""
+    hostname = value[1:] if value.startswith(".") else value
+    if not hostname or not hostname.isascii() or len(hostname) > 253:
+        return False
+    if hostname.startswith("[") and hostname.endswith("]"):
+        try:
+            return isinstance(ipaddress.ip_address(hostname[1:-1]), ipaddress.IPv6Address)
+        except ValueError:
+            return False
+    return all(_HOST_LABEL_RE.fullmatch(label) for label in hostname.split("."))
+
+
+def _https_origin_hostname(value):
+    """Return the hostname for a path-free HTTPS origin, or None if it is unsafe."""
+    try:
+        origin = urlsplit(value)
+        _ = origin.port  # Accessing port also validates its syntax and range.
+    except ValueError:
+        return None
+    if (
+        origin.scheme.lower() != "https"
+        or not origin.hostname
+        or origin.hostname.startswith(".")
+        or origin.username is not None
+        or origin.password is not None
+        or origin.path
+        or origin.query
+        or origin.fragment
+        or not _is_hostname_pattern(origin.hostname)
+    ):
+        return None
+    return origin.hostname.lower()
+
+
+def _allowed_host_covers(hostname, allowed_host):
+    """Match exact hosts plus Django's `.example.com` apex/subdomain syntax."""
+    normalized = allowed_host.lower()
+    if normalized.startswith("."):
+        return hostname == normalized[1:] or hostname.endswith(normalized)
+    if normalized.startswith("[") and normalized.endswith("]"):
+        normalized = normalized[1:-1]
+    return hostname == normalized
 
 
 # Quick-start development settings - unsuitable for production
@@ -74,6 +127,30 @@ if IS_PRODUCTION and not CSRF_TRUSTED_ORIGINS:
     raise ImproperlyConfigured(
         "DJANGO_CSRF_TRUSTED_ORIGINS must list the deployed HTTPS origin in production."
     )
+if IS_PRODUCTION:
+    if any(
+        host == "*" or not _is_hostname_pattern(host) for host in ALLOWED_HOSTS
+    ):
+        raise ImproperlyConfigured(
+            "DJANGO_ALLOWED_HOSTS must contain hostname-only values in production; "
+            "wildcards, schemes, ports, and paths are not allowed."
+        )
+
+    for trusted_origin in CSRF_TRUSTED_ORIGINS:
+        origin_hostname = _https_origin_hostname(trusted_origin)
+        if origin_hostname is None:
+            raise ImproperlyConfigured(
+                "DJANGO_CSRF_TRUSTED_ORIGINS must contain path-free https:// "
+                "origins in production."
+            )
+        if not any(
+            _allowed_host_covers(origin_hostname, allowed_host)
+            for allowed_host in ALLOWED_HOSTS
+        ):
+            raise ImproperlyConfigured(
+                "Every DJANGO_CSRF_TRUSTED_ORIGINS hostname must be covered by "
+                "DJANGO_ALLOWED_HOSTS in production."
+            )
 
 
 # Application definition

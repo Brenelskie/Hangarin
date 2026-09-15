@@ -290,6 +290,28 @@ class LoginInterfaceTests(TestCase):
         self.assertNotContains(response, "Continue with Google")
         self.assertNotContains(response, "Continue with GitHub")
 
+    @override_settings(DEBUG=False)
+    def test_csrf_failure_uses_branded_safe_response(self):
+        client = Client(enforce_csrf_checks=True)
+
+        response = client.post(
+            reverse("login"),
+            {"username": "student", "password": "secret123"},
+        )
+
+        self.assertEqual(response.status_code, 403)
+        self.assertContains(response, "Hangarin", status_code=403)
+        self.assertContains(
+            response,
+            "could not confirm that this request came from you",
+            status_code=403,
+        )
+        self.assertContains(
+            response,
+            f'href="{reverse("login")}"',
+            status_code=403,
+        )
+
 
 class AuthenticationInterfaceTests(TestCase):
     @classmethod

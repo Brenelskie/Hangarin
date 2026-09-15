@@ -163,6 +163,55 @@ print(json.dumps({
             "django.core.mail.backends.smtp.EmailBackend",
         )
 
+    def test_production_accepts_leading_dot_subdomain_host_pattern(self):
+        result = self.load_settings(
+            DJANGO_SECRET_KEY=self.production_secret,
+            DJANGO_ALLOWED_HOSTS=".example.com",
+            DJANGO_CSRF_TRUSTED_ORIGINS="https://hangarin.example.com",
+        )
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_production_rejects_wildcard_allowed_host(self):
+        result = self.load_settings(
+            DJANGO_SECRET_KEY=self.production_secret,
+            DJANGO_ALLOWED_HOSTS="*",
+            DJANGO_CSRF_TRUSTED_ORIGINS="https://hangarin.example.com",
+        )
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("DJANGO_ALLOWED_HOSTS", result.stderr)
+
+    def test_production_rejects_scheme_bearing_allowed_host(self):
+        result = self.load_settings(
+            DJANGO_SECRET_KEY=self.production_secret,
+            DJANGO_ALLOWED_HOSTS="https://hangarin.example.com",
+            DJANGO_CSRF_TRUSTED_ORIGINS="https://hangarin.example.com",
+        )
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("DJANGO_ALLOWED_HOSTS", result.stderr)
+
+    def test_production_rejects_http_csrf_origin(self):
+        result = self.load_settings(
+            DJANGO_SECRET_KEY=self.production_secret,
+            DJANGO_ALLOWED_HOSTS="hangarin.example.com",
+            DJANGO_CSRF_TRUSTED_ORIGINS="http://hangarin.example.com",
+        )
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("DJANGO_CSRF_TRUSTED_ORIGINS", result.stderr)
+
+    def test_production_rejects_csrf_origin_host_mismatch(self):
+        result = self.load_settings(
+            DJANGO_SECRET_KEY=self.production_secret,
+            DJANGO_ALLOWED_HOSTS="hangarin.example.com",
+            DJANGO_CSRF_TRUSTED_ORIGINS="https://other.example.com",
+        )
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("DJANGO_CSRF_TRUSTED_ORIGINS", result.stderr)
+
     def test_production_rejects_missing_host_or_origin(self):
         scenarios = (
             (
