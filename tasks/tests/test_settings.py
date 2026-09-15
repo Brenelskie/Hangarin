@@ -25,6 +25,38 @@ class DevelopmentSettingsTests(SimpleTestCase):
             with self.subTest(entry=entry):
                 self.assertIn(entry, ignored)
 
+    def test_environment_example_documents_every_deployment_control(self):
+        example = (BASE_DIR / ".env.example").read_text(encoding="utf-8")
+        for setting_name in (
+            "DJANGO_ENV",
+            "DJANGO_SECRET_KEY",
+            "DJANGO_DEBUG",
+            "DJANGO_ALLOWED_HOSTS",
+            "DJANGO_CSRF_TRUSTED_ORIGINS",
+            "DJANGO_ENABLE_HSTS",
+            "HANGARIN_ALLOW_PRODUCTION_SEED",
+        ):
+            with self.subTest(setting_name=setting_name):
+                self.assertIn(f"{setting_name}=", example)
+
+    def test_readme_covers_beginner_setup_and_release_recovery(self):
+        readme = (BASE_DIR / "README.md").read_text(encoding="utf-8")
+        for instruction in (
+            "py -3.13 -m venv .venv",
+            "python manage.py migrate",
+            "python manage.py create_initial_data",
+            "python manage.py test",
+            "Manual configuration",
+            "/static/",
+            "Hosted smoke test",
+            "Backup before an update",
+            "Rollback",
+        ):
+            with self.subTest(instruction=instruction):
+                self.assertIn(instruction, readme)
+        self.assertNotIn("/home/qtaqua", readme)
+        self.assertNotIn("Hangrin", readme)
+
 
 class ProductionSettingsTests(SimpleTestCase):
     production_secret = (

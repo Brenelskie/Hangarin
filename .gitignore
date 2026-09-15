@@ -23,6 +23,7 @@ media/
 .coverage
 htmlcov/
 .pytest_cache/
+.playwright-cli/
 
 # Editor and operating-system files
 .vscode/
