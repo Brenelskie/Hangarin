@@ -27,8 +27,12 @@ class DevelopmentSettingsTests(SimpleTestCase):
 
 
 class ProductionSettingsTests(SimpleTestCase):
+    production_secret = (
+        "4c#9!vP7@xQ2$Lm8&bN5*Zd3^sK6-wR1+fT0=Hy9%Ua4?Cg7!eV2"
+    )
+
     @staticmethod
-    def load_settings(**values):
+    def production_environment(**values):
         environment = os.environ.copy()
         for key in (
             "DJANGO_SECRET_KEY",
@@ -38,6 +42,11 @@ class ProductionSettingsTests(SimpleTestCase):
         ):
             environment.pop(key, None)
         environment.update({"DJANGO_ENV": "production", **values})
+        return environment
+
+    @classmethod
+    def load_settings(cls, **values):
+        environment = cls.production_environment(**values)
         script = """
 import json
 from django.conf import settings
@@ -49,12 +58,38 @@ print(json.dumps({
     "secure_session": settings.SESSION_COOKIE_SECURE,
     "secure_csrf": settings.CSRF_COOKIE_SECURE,
     "ssl_redirect": settings.SECURE_SSL_REDIRECT,
+    "mail_backend": settings.MAILERS["default"]["BACKEND"],
 }))
 """
         return subprocess.run(
             [sys.executable, "-c", script],
             cwd=BASE_DIR,
             env={**environment, "DJANGO_SETTINGS_MODULE": "hangarin.settings"},
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+
+    @classmethod
+    def run_deployment_check(cls):
+        environment = cls.production_environment(
+            DJANGO_SECRET_KEY=cls.production_secret,
+            DJANGO_ALLOWED_HOSTS="hangarin.example.com",
+            DJANGO_CSRF_TRUSTED_ORIGINS="https://hangarin.example.com",
+            DJANGO_DEBUG="False",
+            DJANGO_ENABLE_HSTS="True",
+        )
+        return subprocess.run(
+            [
+                sys.executable,
+                "manage.py",
+                "check",
+                "--deploy",
+                "--fail-level",
+                "WARNING",
+            ],
+            cwd=BASE_DIR,
+            env=environment,
             capture_output=True,
             text=True,
             check=False,
@@ -71,7 +106,7 @@ print(json.dumps({
 
     def test_production_accepts_explicit_host_and_origin(self):
         result = self.load_settings(
-            DJANGO_SECRET_KEY="a-production-secret-key-longer-than-fifty-characters-123456789",
+            DJANGO_SECRET_KEY=self.production_secret,
             DJANGO_ALLOWED_HOSTS="hangarin.example.com",
             DJANGO_CSRF_TRUSTED_ORIGINS="https://hangarin.example.com",
             DJANGO_DEBUG="False",
@@ -87,3 +122,33 @@ print(json.dumps({
         self.assertTrue(configured["secure_session"])
         self.assertTrue(configured["secure_csrf"])
         self.assertTrue(configured["ssl_redirect"])
+        self.assertEqual(
+            configured["mail_backend"],
+            "django.core.mail.backends.smtp.EmailBackend",
+        )
+
+    def test_production_rejects_missing_host_or_origin(self):
+        scenarios = (
+            (
+                {"DJANGO_CSRF_TRUSTED_ORIGINS": "https://hangarin.example.com"},
+                "DJANGO_ALLOWED_HOSTS",
+            ),
+            (
+                {"DJANGO_ALLOWED_HOSTS": "hangarin.example.com"},
+                "DJANGO_CSRF_TRUSTED_ORIGINS",
+            ),
+        )
+        for values, setting_name in scenarios:
+            with self.subTest(setting_name=setting_name):
+                result = self.load_settings(
+                    DJANGO_SECRET_KEY=self.production_secret,
+                    **values,
+                )
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn(setting_name, result.stderr)
+
+    def test_django_deployment_checks_accept_complete_secure_configuration(self):
+        result = self.run_deployment_check()
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("System check identified no issues", result.stdout)

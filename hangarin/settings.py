@@ -193,6 +193,10 @@ SECURE_HSTS_PRELOAD = SECURE_HSTS_SECONDS > 0
 
 MAILERS = {
     'default': {
-        'BACKEND': 'django.core.mail.backends.console.EmailBackend',
+        'BACKEND': (
+            'django.core.mail.backends.smtp.EmailBackend'
+            if IS_PRODUCTION
+            else 'django.core.mail.backends.console.EmailBackend'
+        ),
     },
 }
