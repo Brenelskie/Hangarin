@@ -12,15 +12,7 @@
             if (returnFocus) toggle.focus();
         };
 
-        const syncViewport = () => {
-            if (mobile.matches) setOpen(false);
-            else {
-                navigation.inert = false;
-                navigation.classList.remove("is-open");
-                document.body.classList.remove("nav-open");
-                toggle.setAttribute("aria-expanded", "false");
-            }
-        };
+        const syncViewport = () => setOpen(false);
 
         toggle.addEventListener("click", () => {
             const open = toggle.getAttribute("aria-expanded") !== "true";

@@ -3,16 +3,15 @@ from django import forms
 from .models import Category, Note, Priority, SubTask, Task
 
 
-class DateTimeLocalInput(forms.DateTimeInput):
-    input_type = "datetime-local"
-
-
 class TaskForm(forms.ModelForm):
     class Meta:
         model = Task
         fields = ("title", "description", "deadline", "status", "priority", "category")
         widgets = {
-            "deadline": DateTimeLocalInput(format="%Y-%m-%dT%H:%M"),
+            "deadline": forms.DateTimeInput(
+                attrs={"type": "datetime-local"},
+                format="%Y-%m-%dT%H:%M",
+            ),
             "description": forms.Textarea(attrs={"rows": 5}),
         }
 

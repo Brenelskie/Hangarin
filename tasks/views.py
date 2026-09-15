@@ -7,7 +7,6 @@ from django.core.exceptions import ImproperlyConfigured
 from django.core.paginator import InvalidPage
 from django.db.models import Count, Q
 from django.db.models.deletion import ProtectedError
-from django.http import HttpResponseRedirect
 from django.urls import reverse
 from django.utils import timezone
 from django.utils.http import url_has_allowed_host_and_scheme
@@ -52,7 +51,7 @@ def safe_return_url(request, fallback):
 
 
 class ProtectedLogoutView(LoginRequiredMixin, LogoutView):
-    http_method_names = ("post", "options")
+    pass
 
 
 class DashboardView(LoginRequiredMixin, TemplateView):
@@ -62,16 +61,21 @@ class DashboardView(LoginRequiredMixin, TemplateView):
         context = super().get_context_data(**kwargs)
         now = timezone.now()
         incomplete = ~Q(status=StatusChoices.COMPLETED)
+        task_totals = Task.objects.aggregate(
+            task_count=Count("pk"),
+            pending_count=Count(
+                "pk", filter=Q(status=StatusChoices.PENDING)
+            ),
+            in_progress_count=Count(
+                "pk", filter=Q(status=StatusChoices.IN_PROGRESS)
+            ),
+            completed_count=Count(
+                "pk", filter=Q(status=StatusChoices.COMPLETED)
+            ),
+        )
         context.update(
             {
-                "task_count": Task.objects.count(),
-                "pending_count": Task.objects.filter(status=StatusChoices.PENDING).count(),
-                "in_progress_count": Task.objects.filter(
-                    status=StatusChoices.IN_PROGRESS
-                ).count(),
-                "completed_count": Task.objects.filter(
-                    status=StatusChoices.COMPLETED
-                ).count(),
+                **task_totals,
                 "priority_count": Priority.objects.count(),
                 "category_count": Category.objects.count(),
                 "note_count": Note.objects.count(),
@@ -159,8 +163,8 @@ class SafeQueryListView(LoginRequiredMixin, ListView):
             {
                 "active_query": params,
                 "query_string": urlencode(params),
-                "database_empty": not self.model.objects.exists(),
-                "filtered_empty": bool(params) and not context["object_list"],
+                "database_empty": context["paginator"].count == 0
+                and not self.model.objects.exists(),
             }
         )
         return context
@@ -205,11 +209,6 @@ class TaskListView(SafeQueryListView):
     def get_queryset(self):
         return super().get_queryset().select_related("priority", "category")
 
-    def apply_filter(self, queryset, parameter, value):
-        if parameter in {"priority", "category"}:
-            return queryset.filter(**{f"{parameter}_id": value})
-        return super().apply_filter(queryset, parameter, value)
-
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context["priorities"] = Priority.objects.all()
@@ -251,10 +250,6 @@ class NoteListView(SafeQueryListView):
 
     def get_queryset(self):
         return super().get_queryset().select_related("task")
-
-    def apply_filter(self, queryset, parameter, value):
-        return queryset.filter(task_id=value)
-
 
 class SubTaskListView(SafeQueryListView):
     model = SubTask
@@ -424,9 +419,8 @@ class EntityDeleteView(LoginRequiredMixin, DeleteView):
         return context
 
     def form_valid(self, form):
-        success_url = self.get_success_url()
         try:
-            self.object.delete()
+            response = super().form_valid(form)
         except ProtectedError:
             messages.error(
                 self.request,
@@ -435,7 +429,7 @@ class EntityDeleteView(LoginRequiredMixin, DeleteView):
             context = self.get_context_data(form=form, blocked=True)
             return self.render_to_response(context, status=409)
         messages.success(self.request, f"{self.entity_label} deleted successfully.")
-        return HttpResponseRedirect(success_url)
+        return response
 
 
 class TaskDeleteView(EntityDeleteView):
@@ -443,10 +437,16 @@ class TaskDeleteView(EntityDeleteView):
     entity_label = "Task"
     default_success_url = "task-list"
 
+    def get_queryset(self):
+        return super().get_queryset().annotate(
+            note_count=Count("notes", distinct=True),
+            subtask_count=Count("subtasks", distinct=True),
+        )
+
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        context["note_count"] = self.object.notes.count()
-        context["subtask_count"] = self.object.subtasks.count()
+        context["note_count"] = self.object.note_count
+        context["subtask_count"] = self.object.subtask_count
         context["cascade_delete"] = True
         return context
 
