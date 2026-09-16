@@ -7,7 +7,7 @@
 <form method="post" action="{% url 'account_login' %}" class="stack-form auth-form" novalidate aria-labelledby="account-heading">
     {% csrf_token %}
     {{ redirect_field }}
-    {% include "account/login_fields.html" with form=form %}
+    {% include "includes/form_fields.html" with form=form hide_help_for="password" %}
     <button class="button button-primary button-wide" type="submit">Sign in</button>
 </form>
 {% include "account/provider_buttons.html" %}

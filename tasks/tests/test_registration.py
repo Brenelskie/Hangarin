@@ -1,8 +1,4 @@
 import json
-import os
-import subprocess
-import sys
-from pathlib import Path
 
 from allauth.core import context
 from allauth.socialaccount.adapter import get_adapter
@@ -19,9 +15,6 @@ from hangarin.account_adapters import (
     HangarinAccountAdapter,
     HangarinSocialAccountAdapter,
 )
-
-
-BASE_DIR = Path(__file__).resolve().parents[2]
 
 
 def request_with_session(path="/"):
@@ -280,36 +273,3 @@ class SocialProviderConfigurationTests(TestCase):
         self.assertFalse(settings.SOCIALACCOUNT_EMAIL_AUTHENTICATION)
         self.assertFalse(settings.SOCIALACCOUNT_EMAIL_AUTHENTICATION_AUTO_CONNECT)
         self.assertFalse(settings.SOCIALACCOUNT_LOGIN_ON_GET)
-
-    def test_partial_production_provider_credentials_fail_closed(self):
-        environment = os.environ.copy()
-        environment.update(
-            {
-                "DJANGO_SETTINGS_MODULE": "hangarin.settings",
-                "DJANGO_ENV": "production",
-                "DJANGO_SECRET_KEY": "production-secret-value-not-for-source-control",
-                "DJANGO_DEBUG": "False",
-                "DJANGO_ALLOWED_HOSTS": "hangarin.example.com",
-                "DJANGO_CSRF_TRUSTED_ORIGINS": "https://hangarin.example.com",
-                "GOOGLE_OAUTH_CLIENT_ID": "only-a-client-id",
-                "GOOGLE_OAUTH_CLIENT_SECRET": "",
-                "GITHUB_OAUTH_CLIENT_ID": "",
-                "GITHUB_OAUTH_CLIENT_SECRET": "",
-            }
-        )
-
-        result = subprocess.run(
-            [
-                sys.executable,
-                "-c",
-                "from django.conf import settings; print(settings.DEBUG)",
-            ],
-            cwd=BASE_DIR,
-            env=environment,
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-
-        self.assertNotEqual(result.returncode, 0)
-        self.assertIn("GOOGLE_OAUTH_CLIENT", result.stderr)

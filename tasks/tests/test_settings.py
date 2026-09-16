@@ -254,6 +254,17 @@ print(json.dumps({
                 self.assertNotEqual(result.returncode, 0)
                 self.assertIn(setting_name, result.stderr)
 
+    def test_production_rejects_partial_provider_credentials(self):
+        result = self.load_settings(
+            DJANGO_SECRET_KEY=self.production_secret,
+            DJANGO_ALLOWED_HOSTS="hangarin.example.com",
+            DJANGO_CSRF_TRUSTED_ORIGINS="https://hangarin.example.com",
+            GOOGLE_OAUTH_CLIENT_ID="only-a-client-id",
+        )
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("GOOGLE_OAUTH_CLIENT", result.stderr)
+
     def test_django_deployment_checks_accept_complete_secure_configuration(self):
         result = self.run_deployment_check()
 

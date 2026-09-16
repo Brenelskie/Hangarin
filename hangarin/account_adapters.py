@@ -15,11 +15,7 @@ class HangarinAccountAdapter(DefaultAccountAdapter):
 
     def save_user(self, request, user, form, commit=True):
         clear_privileges(user)
-        saved_user = super().save_user(request, user, form, commit=commit)
-        clear_privileges(saved_user)
-        if commit:
-            saved_user.save(update_fields=("is_staff", "is_superuser"))
-        return saved_user
+        return super().save_user(request, user, form, commit=commit)
 
 
 class HangarinSocialAccountAdapter(DefaultSocialAccountAdapter):
@@ -31,10 +27,7 @@ class HangarinSocialAccountAdapter(DefaultSocialAccountAdapter):
 
     def save_user(self, request, sociallogin, form=None):
         clear_privileges(sociallogin.user)
-        user = super().save_user(request, sociallogin, form=form)
-        clear_privileges(user)
-        user.save(update_fields=("is_staff", "is_superuser"))
-        return user
+        return super().save_user(request, sociallogin, form=form)
 
     def list_apps(self, request, provider=None, client_id=None):
         """Use environment-backed settings apps, never database credentials."""
