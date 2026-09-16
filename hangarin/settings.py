@@ -162,6 +162,11 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    'allauth',
+    'allauth.account',
+    'allauth.socialaccount',
+    'allauth.socialaccount.providers.google',
+    'allauth.socialaccount.providers.github',
     'tasks',
 ]
 
@@ -171,6 +176,7 @@ MIDDLEWARE = [
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
+    'allauth.account.middleware.AccountMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
@@ -246,9 +252,66 @@ STATICFILES_DIRS = [BASE_DIR / 'static']
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
-LOGIN_URL = 'login'
+AUTHENTICATION_BACKENDS = [
+    'django.contrib.auth.backends.ModelBackend',
+    'allauth.account.auth_backends.AuthenticationBackend',
+]
+
+LOGIN_URL = 'account_login'
 LOGIN_REDIRECT_URL = 'dashboard'
-LOGOUT_REDIRECT_URL = 'login'
+LOGOUT_REDIRECT_URL = 'account_login'
+
+ACCOUNT_ADAPTER = 'hangarin.account_adapters.HangarinAccountAdapter'
+SOCIALACCOUNT_ADAPTER = 'hangarin.account_adapters.HangarinSocialAccountAdapter'
+ACCOUNT_LOGIN_METHODS = {'username'}
+ACCOUNT_SIGNUP_FIELDS = ['username*', 'password1*', 'password2*']
+ACCOUNT_EMAIL_VERIFICATION = 'none'
+ACCOUNT_LOGOUT_ON_GET = False
+SOCIALACCOUNT_LOGIN_ON_GET = False
+SOCIALACCOUNT_STORE_TOKENS = False
+SOCIALACCOUNT_EMAIL_AUTHENTICATION = False
+SOCIALACCOUNT_EMAIL_AUTHENTICATION_AUTO_CONNECT = False
+
+
+def social_oauth_app(provider_name, client_id_name, client_secret_name):
+    """Return one settings-backed OAuth app, hiding incomplete local config."""
+    client_id = os.getenv(client_id_name, '').strip()
+    secret = os.getenv(client_secret_name, '').strip()
+    if IS_PRODUCTION and bool(client_id) != bool(secret):
+        raise ImproperlyConfigured(
+            f'{client_id_name} and {client_secret_name} must both be set in production.'
+        )
+    if not client_id or not secret:
+        return []
+    return [
+        {
+            'client_id': client_id,
+            'secret': secret,
+            'key': '',
+            'name': f'Hangarin {provider_name}',
+        }
+    ]
+
+
+SOCIALACCOUNT_PROVIDERS = {
+    'google': {
+        'APPS': social_oauth_app(
+            'Google',
+            'GOOGLE_OAUTH_CLIENT_ID',
+            'GOOGLE_OAUTH_CLIENT_SECRET',
+        ),
+        'SCOPE': ['profile', 'email'],
+        'OAUTH_PKCE_ENABLED': True,
+    },
+    'github': {
+        'APPS': social_oauth_app(
+            'GitHub',
+            'GITHUB_OAUTH_CLIENT_ID',
+            'GITHUB_OAUTH_CLIENT_SECRET',
+        ),
+        'SCOPE': ['user:email'],
+    },
+}
 
 SESSION_COOKIE_HTTPONLY = True
 SESSION_COOKIE_SAMESITE = 'Lax'

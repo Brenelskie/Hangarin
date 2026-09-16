@@ -20,7 +20,8 @@ TEST_TEMPLATES = [
                 (
                     "django.template.loaders.locmem.Loader",
                     {
-                        "registration/login.html": "<form method='post'>{% csrf_token %}{{ form }}<button>Login</button></form>",
+                        "account/login.html": "<form method='post'>{% csrf_token %}{{ form }}<button>Login</button></form>",
+                        "account/logout.html": "<form method='post'>{% csrf_token %}<button>Logout</button></form>",
                         "tasks/dashboard.html": "Dashboard {{ task_count }}",
                         "tasks/task_list.html": "{% for task in tasks %}{{ task.title }}{% endfor %}",
                         "tasks/priority_list.html": "{% for item in priorities %}{{ item }}{% endfor %}",
@@ -84,7 +85,7 @@ class AuthenticationContractTests(TestCase):
 
         self.assertRedirects(
             response,
-            f'{reverse("login")}?next={reverse("dashboard")}',
+            f'{reverse("account_login")}?next={reverse("dashboard")}',
         )
 
     def test_active_user_can_open_dashboard(self):
@@ -120,7 +121,7 @@ class AuthenticationContractTests(TestCase):
             with self.subTest(url=url):
                 response = self.client.get(url)
                 self.assertEqual(response.status_code, 302)
-                self.assertTrue(response.url.startswith(reverse("login")))
+                self.assertTrue(response.url.startswith(reverse("account_login")))
 
     def test_disabled_user_is_treated_as_logged_out(self):
         self.client.force_login(self.disabled)
@@ -129,7 +130,7 @@ class AuthenticationContractTests(TestCase):
 
         self.assertRedirects(
             response,
-            f'{reverse("login")}?next={reverse("dashboard")}',
+            f'{reverse("account_login")}?next={reverse("dashboard")}',
         )
 
     def test_custom_site_is_shared_by_active_user_staff_and_superuser(self):
@@ -154,48 +155,46 @@ class AuthenticationContractTests(TestCase):
 
     def test_valid_login_honors_safe_next_and_rejects_external_next(self):
         safe_response = self.client.post(
-            reverse("login"),
-            {"username": "student", "password": "secret123", "next": reverse("task-list")},
+            reverse("account_login"),
+            {"login": "student", "password": "secret123", "next": reverse("task-list")},
         )
         self.assertRedirects(safe_response, reverse("task-list"))
         self.client.logout()
 
         unsafe_response = self.client.post(
-            f'{reverse("login")}?next=https://evil.example/phish',
-            {"username": "student", "password": "secret123"},
+            f'{reverse("account_login")}?next=https://evil.example/phish',
+            {"login": "student", "password": "secret123"},
         )
         self.assertRedirects(unsafe_response, reverse("dashboard"))
 
     def test_invalid_login_does_not_authenticate_or_reveal_account_state(self):
         response = self.client.post(
-            reverse("login"),
-            {"username": "student", "password": "wrong-password"},
+            reverse("account_login"),
+            {"login": "student", "password": "wrong-password"},
         )
 
         self.assertEqual(response.status_code, 200)
         self.assertNotIn("_auth_user_id", self.client.session)
-        self.assertContains(response, "Please enter a correct username and password")
+        self.assertContains(
+            response,
+            "The username and/or password you specified are not correct.",
+        )
 
     def test_logout_requires_post_and_get_does_not_end_session(self):
         self.client.force_login(self.user)
 
-        get_response = self.client.get(reverse("logout"))
-        self.assertEqual(get_response.status_code, 405)
+        get_response = self.client.get(reverse("account_logout"))
+        self.assertEqual(get_response.status_code, 200)
         self.assertIn("_auth_user_id", self.client.session)
 
-        post_response = self.client.post(reverse("logout"))
-        self.assertRedirects(post_response, reverse("login"))
+        post_response = self.client.post(reverse("account_logout"))
+        self.assertRedirects(post_response, reverse("account_login"))
         self.assertNotIn("_auth_user_id", self.client.session)
 
-    def test_signup_reset_and_social_routes_are_not_mounted(self):
-        for path in (
-            "/accounts/signup/",
-            "/accounts/password/reset/",
-            "/accounts/google/login/",
-            "/accounts/github/login/",
-        ):
-            with self.subTest(path=path):
-                self.assertEqual(self.client.get(path).status_code, 404)
+    def test_signup_and_social_routes_are_mounted(self):
+        self.assertEqual(reverse("account_signup"), "/accounts/signup/")
+        self.assertEqual(reverse("google_login"), "/accounts/google/login/")
+        self.assertEqual(reverse("github_login"), "/accounts/github/login/")
 
     def test_csrf_blocks_task_mutations_and_accepts_same_origin_token(self):
         client = Client(enforce_csrf_checks=True)
@@ -278,15 +277,16 @@ class AuthenticationContractTests(TestCase):
 
 
 class LoginInterfaceTests(TestCase):
-    def test_login_is_hangarin_branded_and_local_account_only(self):
-        response = self.client.get(reverse("login"))
+    def test_login_is_hangarin_branded_and_links_public_signup(self):
+        response = self.client.get(reverse("account_login"))
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Hangarin")
         self.assertContains(response, "Give every goal a next step")
-        self.assertContains(response, "Public registration and social login are not enabled")
+        self.assertContains(response, f'href="{reverse("account_signup")}"')
         self.assertContains(response, "Skip to main content")
         self.assertNotContains(response, "PSUSphere")
+        # Provider actions stay hidden until both environment credentials exist.
         self.assertNotContains(response, "Continue with Google")
         self.assertNotContains(response, "Continue with GitHub")
 
@@ -295,7 +295,7 @@ class LoginInterfaceTests(TestCase):
         client = Client(enforce_csrf_checks=True)
 
         response = client.post(
-            reverse("login"),
+            reverse("account_login"),
             {"username": "student", "password": "secret123"},
         )
 
@@ -308,7 +308,7 @@ class LoginInterfaceTests(TestCase):
         )
         self.assertContains(
             response,
-            f'href="{reverse("login")}"',
+            f'href="{reverse("account_login")}"',
             status_code=403,
         )
 
@@ -321,7 +321,7 @@ class AuthenticationInterfaceTests(TestCase):
         )
 
     def test_login_uses_hangarin_brand_without_social_or_psusphere_copy(self):
-        response = self.client.get(reverse("login"))
+        response = self.client.get(reverse("account_login"))
 
         self.assertContains(response, "Hangarin")
         self.assertContains(response, 'href="#main-content"')
@@ -336,7 +336,7 @@ class AuthenticationInterfaceTests(TestCase):
         response = self.client.get(reverse("dashboard"))
 
         self.assertContains(response, "Shared workspace")
-        self.assertContains(response, 'action="%s"' % reverse("logout"))
+        self.assertContains(response, 'action="%s"' % reverse("account_logout"))
         self.assertContains(response, 'aria-current="page"')
         self.assertContains(response, 'aria-controls="primary-navigation"')
         self.assertContains(response, 'aria-expanded="false"')

@@ -5,7 +5,6 @@ from urllib.parse import urlencode, urlsplit
 
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
-from django.contrib.auth.views import LogoutView
 from django.core.exceptions import ImproperlyConfigured
 from django.core.paginator import InvalidPage
 from django.db import transaction
@@ -52,10 +51,6 @@ def safe_return_url(request, fallback):
     if path != "/" and not path.startswith(SAFE_RETURN_PREFIXES):
         return fallback
     return candidate
-
-
-class ProtectedLogoutView(LoginRequiredMixin, LogoutView):
-    pass
 
 
 class DashboardView(LoginRequiredMixin, TemplateView):
