@@ -17,7 +17,13 @@ class DevelopmentSettingsTests(SimpleTestCase):
         self.assertIn("tasks", settings.INSTALLED_APPS)
         self.assertEqual(settings.STATIC_ROOT, BASE_DIR / "staticfiles")
         self.assertIn(BASE_DIR / "templates", settings.TEMPLATES[0]["DIRS"])
-        self.assertEqual(settings.LOGIN_URL, "login")
+        self.assertEqual(settings.LOGIN_URL, "account_login")
+        self.assertIn("allauth.account", settings.INSTALLED_APPS)
+        self.assertIn("allauth.socialaccount", settings.INSTALLED_APPS)
+        self.assertFalse(settings.ACCOUNT_LOGOUT_ON_GET)
+        self.assertFalse(settings.SOCIALACCOUNT_LOGIN_ON_GET)
+        self.assertFalse(settings.SOCIALACCOUNT_STORE_TOKENS)
+        self.assertFalse(settings.SOCIALACCOUNT_EMAIL_AUTHENTICATION)
 
     def test_generated_and_secret_files_are_ignored(self):
         ignored = (BASE_DIR / ".gitignore").read_text(encoding="utf-8")
@@ -35,6 +41,10 @@ class DevelopmentSettingsTests(SimpleTestCase):
             "DJANGO_CSRF_TRUSTED_ORIGINS",
             "DJANGO_ENABLE_HSTS",
             "HANGARIN_ALLOW_PRODUCTION_SEED",
+            "GOOGLE_OAUTH_CLIENT_ID",
+            "GOOGLE_OAUTH_CLIENT_SECRET",
+            "GITHUB_OAUTH_CLIENT_ID",
+            "GITHUB_OAUTH_CLIENT_SECRET",
         ):
             with self.subTest(setting_name=setting_name):
                 self.assertIn(f"{setting_name}=", example)
@@ -51,6 +61,10 @@ class DevelopmentSettingsTests(SimpleTestCase):
             "Hosted smoke test",
             "Backup before an update",
             "Rollback",
+            "python manage.py createsuperuser",
+            "/accounts/google/login/callback/",
+            "/accounts/github/login/callback/",
+            "regular user",
         ):
             with self.subTest(instruction=instruction):
                 self.assertIn(instruction, readme)
@@ -75,6 +89,10 @@ class ProductionSettingsTests(SimpleTestCase):
                 "DJANGO_CSRF_TRUSTED_ORIGINS": "",
                 "DJANGO_ENABLE_HSTS": "False",
                 "HANGARIN_ALLOW_PRODUCTION_SEED": "False",
+                "GOOGLE_OAUTH_CLIENT_ID": "",
+                "GOOGLE_OAUTH_CLIENT_SECRET": "",
+                "GITHUB_OAUTH_CLIENT_ID": "",
+                "GITHUB_OAUTH_CLIENT_SECRET": "",
                 **values,
             }
         )
@@ -114,6 +132,10 @@ print(json.dumps({
             DJANGO_CSRF_TRUSTED_ORIGINS="https://hangarin.example.com",
             DJANGO_DEBUG="False",
             DJANGO_ENABLE_HSTS="True",
+            GOOGLE_OAUTH_CLIENT_ID="test-google-client-id",
+            GOOGLE_OAUTH_CLIENT_SECRET="test-google-client-secret",
+            GITHUB_OAUTH_CLIENT_ID="test-github-client-id",
+            GITHUB_OAUTH_CLIENT_SECRET="test-github-client-secret",
         )
         return subprocess.run(
             [

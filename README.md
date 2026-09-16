@@ -5,8 +5,9 @@ manage tasks, priorities, categories, notes, and subtasks. Staff users can also
 manage the same five models in Django Admin.
 
 This is a separate project from PSUSphere. It uses Hangarin branding, its own
-database, and Django's built-in username/password login. Google login, GitHub
-login, public registration, and password reset are intentionally not included.
+database, public username/password registration, and optional Google and GitHub
+login through django-allauth. Every public signup creates a regular user. Public
+pages never offer an administrator role.
 
 ## What the project contains
 
@@ -118,10 +119,50 @@ These steps start from a clean checkout and use Python 3.13.
     python manage.py runserver
     ```
 
-Use the superuser account, or let a staff user create a normal account in Admin
-under **Authentication and Authorization > Users**. Every active signed-in user
-works with the same shared task dataset. The site is not a private per-user task
-list.
+Open `http://127.0.0.1:8000/accounts/signup/` to create a regular user. Every
+active signed-in user works with the same shared task dataset; this is not a
+private per-user task list.
+
+The first administrator must be created with `python manage.py createsuperuser`.
+Only an existing superuser can create, promote, or change staff and superuser
+accounts in Django Admin. A public registration or social login can never create
+an administrator.
+
+## Optional Google and GitHub login
+
+Local username registration works without OAuth credentials. If a provider's two
+environment values are empty, Hangarin hides that provider instead of showing a
+broken button.
+
+Create separate OAuth applications for local development and production. Never
+reuse secrets in source code or commit them to Git.
+
+For the local Google OAuth web application, add these values in Google Cloud:
+
+```text
+Authorized JavaScript origin: http://127.0.0.1:8000
+Authorized redirect URI:      http://127.0.0.1:8000/accounts/google/login/callback/
+```
+
+For the local GitHub OAuth application, use:
+
+```text
+Homepage URL:                   http://127.0.0.1:8000
+Authorization callback URL:    http://127.0.0.1:8000/accounts/github/login/callback/
+```
+
+Put the resulting values in the untracked local `.env` file:
+
+```dotenv
+GOOGLE_OAUTH_CLIENT_ID=<local-google-client-id>
+GOOGLE_OAUTH_CLIENT_SECRET=<local-google-client-secret>
+GITHUB_OAUTH_CLIENT_ID=<local-github-client-id>
+GITHUB_OAUTH_CLIENT_SECRET=<local-github-client-secret>
+```
+
+Restart `runserver` after changing `.env`. Provider buttons start OAuth through a
+CSRF-protected POST. Hangarin does not store provider tokens and does not silently
+merge a social identity into an existing local account by matching email.
 
 ## Everyday local commands
 
@@ -263,6 +304,10 @@ DJANGO_ALLOWED_HOSTS=<hostname>
 DJANGO_CSRF_TRUSTED_ORIGINS=https://<hostname>
 DJANGO_ENABLE_HSTS=False
 HANGARIN_ALLOW_PRODUCTION_SEED=False
+GOOGLE_OAUTH_CLIENT_ID=<production-google-client-id>
+GOOGLE_OAUTH_CLIENT_SECRET=<production-google-client-secret>
+GITHUB_OAUTH_CLIENT_ID=<production-github-client-id>
+GITHUB_OAUTH_CLIENT_SECRET=<production-github-client-secret>
 ```
 
 For the free PythonAnywhere hostname, `<hostname>` is normally
@@ -277,6 +322,19 @@ chmod 600 /home/<username>/Hangarin/.env
 
 Hangarin loads this same untracked file from both `hangarin/settings.py` and
 `hangarin/wsgi.py`, so Web requests and management commands use the same values.
+Create production OAuth applications with these exact HTTPS values:
+
+```text
+Google authorized JavaScript origin: https://<hostname>
+Google authorized redirect URI:      https://<hostname>/accounts/google/login/callback/
+GitHub homepage URL:                  https://<hostname>
+GitHub callback URL:                  https://<hostname>/accounts/github/login/callback/
+```
+
+Do not include a trailing path in the origin/homepage value. Keep the trailing
+slash on both callback URLs. If only one value in a provider pair is present,
+production startup fails intentionally instead of exposing a half-configured
+login button.
 
 ### 5. Prepare the database
 
@@ -400,21 +458,26 @@ Use a clearly named temporary record and avoid changing real shared data.
    CSS, not a 404 page.
 2. In a private browser window, open `https://<hostname>/tasks/`. It must redirect
    to the styled Hangarin login page.
-3. Submit one invalid login and confirm the error is generic.
-4. Sign in and confirm the dashboard, overdue/upcoming queues, and totals render.
-5. On Tasks, combine a search, status, priority, category, ordering, and Next/Last
+3. Create one temporary account through **Create account**. Confirm it is a
+   regular user and that `/admin/` refuses access.
+4. Submit one invalid login and confirm the error is generic.
+5. Test each configured Google and GitHub button. Confirm the provider returns to
+   the exact HTTPS callback and the resulting account is a regular user.
+6. Sign in and confirm the dashboard, overdue/upcoming queues, and totals render.
+7. On Tasks, combine a search, status, priority, category, ordering, and Next/Last
    pagination. Confirm the active choices remain selected.
-6. Submit an Add Task form with a blank required field. Confirm the linked error
+8. Submit an Add Task form with a blank required field. Confirm the linked error
    summary appears and no record is created.
-7. Create, view, edit, and delete one task named
+9. Create, view, edit, and delete one task named
    `Deployment smoke - YYYY-MM-DD`. Confirm the delete page describes child impact.
-8. Open Admin as staff and confirm all five model sections and required columns.
-9. Open a missing URL such as `/definitely-missing/` and confirm the branded 404.
-10. Log out using the Log out button. A direct GET to `/accounts/logout/` must not
+10. Open Admin as authorized staff and confirm the five domain-model sections.
+    Sign in as a superuser to confirm User and Group privilege administration.
+11. Open a missing URL such as `/definitely-missing/` and confirm the branded 404.
+12. Log out using the Log out button. A direct GET to `/accounts/logout/` must not
     end a session.
-11. In browser developer tools, confirm session and CSRF cookies are Secure,
+13. In browser developer tools, confirm session and CSRF cookies are Secure,
     HttpOnly, and SameSite=Lax.
-12. Review PythonAnywhere access, error, and server logs. There must be no new 5xx,
+14. Review PythonAnywhere access, error, and server logs. There must be no new 5xx,
     CSRF, static-file, import, host, or database-lock errors.
 
 Review the logs again after 15 minutes, one hour, and the next day.
@@ -502,6 +565,14 @@ authentication, CRUD, count, or log check fails.
   `DJANGO_ALLOWED_HOSTS`, without `https://`.
 - **CSRF failure:** put the exact HTTPS origin in
   `DJANGO_CSRF_TRUSTED_ORIGINS`, including `https://` and no path.
+- **A Google or GitHub button is missing:** set both the client ID and client
+  secret for that provider, then reload the Web app. One empty value hides the
+  provider locally; a partial pair is rejected in production.
+- **OAuth redirect mismatch:** copy the exact provider callback from the OAuth
+  section, including `https://`, `/accounts/.../login/callback/`, and its trailing
+  slash. Local and PythonAnywhere deployments need separate OAuth applications.
+- **A regular user cannot open Admin:** this is expected. Use `createsuperuser`
+  for the first administrator; only a superuser may grant later staff access.
 - **Redirect loop:** verify the proxy header configuration is unchanged and avoid
   layering another proxy's HTTPS redirect over both Django and PythonAnywhere.
 - **Demo command refuses to run:** create every exact lookup value first. If any
