@@ -3,6 +3,11 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth.admin import GroupAdmin, UserAdmin
 from django.contrib.auth.models import Group
 
+from allauth.account.admin import EmailAddressAdmin
+from allauth.account.models import EmailAddress
+from allauth.socialaccount.admin import SocialAccountAdmin
+from allauth.socialaccount.models import SocialAccount, SocialApp, SocialToken
+
 from .models import Category, Note, Priority, SubTask, Task
 
 
@@ -33,6 +38,20 @@ class SuperuserOnlyGroupAdmin(SuperuserOnlyPrivilegeAdminMixin, GroupAdmin):
     pass
 
 
+class SuperuserOnlyEmailAddressAdmin(
+    SuperuserOnlyPrivilegeAdminMixin,
+    EmailAddressAdmin,
+):
+    pass
+
+
+class SuperuserOnlySocialAccountAdmin(
+    SuperuserOnlyPrivilegeAdminMixin,
+    SocialAccountAdmin,
+):
+    pass
+
+
 user_model = get_user_model()
 if admin.site.is_registered(user_model):
     admin.site.unregister(user_model)
@@ -41,6 +60,18 @@ admin.site.register(user_model, SuperuserOnlyUserAdmin)
 if admin.site.is_registered(Group):
     admin.site.unregister(Group)
 admin.site.register(Group, SuperuserOnlyGroupAdmin)
+
+if admin.site.is_registered(EmailAddress):
+    admin.site.unregister(EmailAddress)
+admin.site.register(EmailAddress, SuperuserOnlyEmailAddressAdmin)
+
+if admin.site.is_registered(SocialAccount):
+    admin.site.unregister(SocialAccount)
+admin.site.register(SocialAccount, SuperuserOnlySocialAccountAdmin)
+
+for credential_model in (SocialApp, SocialToken):
+    if admin.site.is_registered(credential_model):
+        admin.site.unregister(credential_model)
 
 
 @admin.register(Task)

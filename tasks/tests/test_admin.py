@@ -5,6 +5,9 @@ from django.test import RequestFactory, TestCase
 from django.urls import reverse
 from django.utils import timezone
 
+from allauth.account.models import EmailAddress
+from allauth.socialaccount.models import SocialAccount, SocialApp, SocialToken
+
 from tasks.models import Category, Note, Priority, SubTask, Task
 
 
@@ -160,8 +163,15 @@ class PrivilegeAdministrationTests(TestCase):
             is_staff=True,
         )
         privilege_permissions = Permission.objects.filter(
-            content_type__app_label="auth",
-            content_type__model__in=("user", "group"),
+            content_type__app_label__in=("auth", "account", "socialaccount"),
+            content_type__model__in=(
+                "user",
+                "group",
+                "emailaddress",
+                "socialaccount",
+                "socialapp",
+                "socialtoken",
+            ),
         )
         cls.staff_user.user_permissions.set(privilege_permissions)
 
@@ -172,7 +182,7 @@ class PrivilegeAdministrationTests(TestCase):
 
     def assert_privilege_admin_permissions(self, user, expected):
         request = self.permission_request_for(user)
-        for model in (get_user_model(), Group):
+        for model in (get_user_model(), Group, EmailAddress, SocialAccount):
             model_admin = admin.site._registry[model]
             checks = (
                 model_admin.has_module_permission,
@@ -189,16 +199,29 @@ class PrivilegeAdministrationTests(TestCase):
                 ):
                     self.assertIs(check(request), expected)
 
-    def test_non_superuser_staff_cannot_administer_users_or_groups(self):
+    def test_non_superuser_staff_cannot_administer_privileged_accounts(self):
         self.assert_privilege_admin_permissions(self.staff_user, False)
 
-    def test_superuser_retains_user_and_group_administration(self):
+    def test_superuser_retains_privileged_account_administration(self):
         self.assert_privilege_admin_permissions(self.superuser, True)
+
+    def test_oauth_credentials_and_tokens_are_not_registered(self):
+        self.assertNotIn(SocialApp, admin.site._registry)
+        self.assertNotIn(SocialToken, admin.site._registry)
 
     def test_non_superuser_staff_cannot_bypass_restriction_with_direct_urls(self):
         self.client.force_login(self.staff_user)
         target_user = get_user_model().objects.create_user(username="target-user")
         target_group = Group.objects.create(name="Target group")
+        email_address = EmailAddress.objects.create(
+            user=target_user,
+            email="target@example.com",
+        )
+        social_account = SocialAccount.objects.create(
+            user=target_user,
+            provider="github",
+            uid="target-github-account",
+        )
         restricted_urls = (
             reverse("admin:auth_user_changelist"),
             reverse("admin:auth_user_add"),
@@ -208,13 +231,27 @@ class PrivilegeAdministrationTests(TestCase):
             reverse("admin:auth_group_add"),
             reverse("admin:auth_group_change", args=(target_group.pk,)),
             reverse("admin:auth_group_delete", args=(target_group.pk,)),
+            reverse("admin:account_emailaddress_changelist"),
+            reverse("admin:account_emailaddress_add"),
+            reverse("admin:account_emailaddress_change", args=(email_address.pk,)),
+            reverse("admin:account_emailaddress_delete", args=(email_address.pk,)),
+            reverse("admin:socialaccount_socialaccount_changelist"),
+            reverse("admin:socialaccount_socialaccount_add"),
+            reverse(
+                "admin:socialaccount_socialaccount_change",
+                args=(social_account.pk,),
+            ),
+            reverse(
+                "admin:socialaccount_socialaccount_delete",
+                args=(social_account.pk,),
+            ),
         )
 
         for url in restricted_urls:
             with self.subTest(url=url):
                 self.assertEqual(self.client.get(url).status_code, 403)
 
-    def test_superuser_can_open_user_and_group_admin_pages(self):
+    def test_superuser_can_open_privileged_account_admin_pages(self):
         self.client.force_login(self.superuser)
 
         for url in (
@@ -222,6 +259,10 @@ class PrivilegeAdministrationTests(TestCase):
             reverse("admin:auth_user_add"),
             reverse("admin:auth_group_changelist"),
             reverse("admin:auth_group_add"),
+            reverse("admin:account_emailaddress_changelist"),
+            reverse("admin:account_emailaddress_add"),
+            reverse("admin:socialaccount_socialaccount_changelist"),
+            reverse("admin:socialaccount_socialaccount_add"),
         ):
             with self.subTest(url=url):
                 self.assertEqual(self.client.get(url).status_code, 200)

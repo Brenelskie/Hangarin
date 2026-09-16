@@ -1,0 +1,10 @@
+{% extends "account/base_auth.html" %}
+{% block account_title %}Account inactive{% endblock %}
+{% block account_content %}
+<p class="eyebrow">Account access</p>
+<h2 id="account-heading">This account is inactive</h2>
+<p class="muted">Ask a Hangarin administrator to review the account before trying to sign in again.</p>
+<div class="auth-form" aria-labelledby="account-heading">
+    <a class="button button-primary button-wide" href="{% url 'account_login' %}">Return to sign in</a>
+</div>
+{% endblock %}

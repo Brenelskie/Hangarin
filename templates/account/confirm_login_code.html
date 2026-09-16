@@ -1,0 +1,14 @@
+{% extends "account/base_auth.html" %}
+{% block account_title %}Confirm sign in{% endblock %}
+{% block account_content %}
+<p class="eyebrow">Account security</p>
+<h2 id="account-heading">Enter your sign-in code</h2>
+<p class="muted">Enter the code provided for this sign-in attempt.</p>
+<form method="post" action="{% url 'account_confirm_login_code' %}" class="stack-form auth-form" novalidate aria-labelledby="account-heading">
+    {% csrf_token %}
+    {{ redirect_field }}
+    {% include "includes/form_fields.html" with form=form %}
+    <button class="button button-primary button-wide" type="submit">Confirm sign in</button>
+    <a class="button button-secondary button-wide" href="{% url 'account_login' %}">Cancel and return</a>
+</form>
+{% endblock %}

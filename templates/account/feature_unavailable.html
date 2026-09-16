@@ -1,0 +1,15 @@
+{% extends "account/base_auth.html" %}
+{% block account_title %}Account help{% endblock %}
+{% block account_content %}
+<p class="eyebrow">Account help</p>
+<h2 id="account-heading">{{ feature_title }}</h2>
+<p class="muted">{{ feature_message }}</p>
+<div class="auth-form" aria-labelledby="account-heading">
+    {% if user.is_authenticated %}
+        <a class="button button-primary button-wide" href="{% url 'dashboard' %}">Return to dashboard</a>
+    {% else %}
+        <a class="button button-primary button-wide" href="{% url 'account_login' %}">Return to sign in</a>
+        <a class="button button-secondary button-wide" href="{% url 'account_signup' %}">Create a regular account</a>
+    {% endif %}
+</div>
+{% endblock %}

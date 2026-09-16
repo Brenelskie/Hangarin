@@ -1,9 +1,13 @@
 import json
+from unittest.mock import patch
+from urllib.parse import parse_qs, urlparse
 
 from allauth.core import context
 from allauth.socialaccount.adapter import get_adapter
 from allauth.socialaccount.models import SocialAccount, SocialApp, SocialLogin
 from allauth.socialaccount.providers.google.provider import GoogleProvider
+from allauth.socialaccount.providers.github.views import GitHubOAuth2Adapter
+from allauth.socialaccount.providers.google.views import GoogleOAuth2Adapter
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.contrib.sessions.middleware import SessionMiddleware
@@ -273,3 +277,186 @@ class SocialProviderConfigurationTests(TestCase):
         self.assertFalse(settings.SOCIALACCOUNT_EMAIL_AUTHENTICATION)
         self.assertFalse(settings.SOCIALACCOUNT_EMAIL_AUTHENTICATION_AUTO_CONNECT)
         self.assertFalse(settings.SOCIALACCOUNT_LOGIN_ON_GET)
+
+
+@override_settings(
+    SOCIALACCOUNT_PROVIDERS={
+        "google": {
+            "APPS": [
+                {
+                    "client_id": "test-google-client",
+                    "secret": "test-google-secret",
+                    "key": "",
+                }
+            ],
+            "SCOPE": ["profile", "email"],
+            "OAUTH_PKCE_ENABLED": True,
+        },
+        "github": {
+            "APPS": [
+                {
+                    "client_id": "test-github-client",
+                    "secret": "test-github-secret",
+                    "key": "",
+                }
+            ],
+            "SCOPE": ["user:email"],
+        },
+    }
+)
+class SocialCallbackFlowTests(TestCase):
+    provider_cases = (
+        (
+            "google",
+            "google_login",
+            "google_callback",
+            GoogleOAuth2Adapter,
+        ),
+        (
+            "github",
+            "github_login",
+            "github_callback",
+            GitHubOAuth2Adapter,
+        ),
+    )
+
+    def provider_payload(self, provider_name, uid, email):
+        if provider_name == "google":
+            return {
+                "sub": uid,
+                "email": email,
+                "email_verified": True,
+                "given_name": "Test",
+                "family_name": "Student",
+            }
+        return {
+            "id": uid,
+            "login": f"github-{uid}",
+            "name": "Test Student",
+            "email": email,
+            "emails": [
+                {
+                    "email": email,
+                    "primary": True,
+                    "verified": True,
+                }
+            ],
+        }
+
+    def complete_callback(
+        self,
+        client,
+        login_route,
+        callback_route,
+        adapter_class,
+        payload,
+    ):
+        initiation = client.post(f'{reverse(login_route)}?process=login')
+        self.assertEqual(initiation.status_code, 302)
+        state = parse_qs(urlparse(initiation.url).query)["state"][0]
+
+        def complete_login(adapter, request, app, token, **kwargs):
+            return adapter.get_provider().sociallogin_from_response(request, payload)
+
+        with (
+            patch.object(
+                adapter_class,
+                "get_access_token_data",
+                autospec=True,
+                return_value={"access_token": "test-access-token"},
+            ),
+            patch.object(
+                adapter_class,
+                "complete_login",
+                autospec=True,
+                side_effect=complete_login,
+            ),
+        ):
+            return client.get(
+                reverse(callback_route),
+                {"state": state, "code": "test-authorization-code"},
+            )
+
+    def test_google_and_github_callbacks_preserve_account_boundaries(self):
+        for (
+            provider_name,
+            login_route,
+            callback_route,
+            adapter_class,
+        ) in self.provider_cases:
+            with self.subTest(provider=provider_name, scenario="first login"):
+                uid = f"{provider_name}-first-identity"
+                email = f"{provider_name}-first@example.com"
+                first_client = Client()
+                first_response = self.complete_callback(
+                    first_client,
+                    login_route,
+                    callback_route,
+                    adapter_class,
+                    self.provider_payload(provider_name, uid, email),
+                )
+
+                self.assertRedirects(first_response, reverse("dashboard"))
+                social_account = SocialAccount.objects.get(
+                    provider=provider_name,
+                    uid=uid,
+                )
+                first_user = social_account.user
+                self.assertFalse(first_user.is_staff)
+                self.assertFalse(first_user.is_superuser)
+                self.assertEqual(
+                    int(first_client.session["_auth_user_id"]),
+                    first_user.pk,
+                )
+
+            with self.subTest(provider=provider_name, scenario="repeat login"):
+                repeat_client = Client()
+                repeat_response = self.complete_callback(
+                    repeat_client,
+                    login_route,
+                    callback_route,
+                    adapter_class,
+                    self.provider_payload(provider_name, uid, email),
+                )
+
+                self.assertRedirects(repeat_response, reverse("dashboard"))
+                self.assertEqual(
+                    int(repeat_client.session["_auth_user_id"]),
+                    first_user.pk,
+                )
+                self.assertEqual(
+                    SocialAccount.objects.filter(
+                        provider=provider_name,
+                        uid=uid,
+                    ).count(),
+                    1,
+                )
+
+            with self.subTest(provider=provider_name, scenario="email collision"):
+                collision_email = f"{provider_name}-local@example.com"
+                local_user = get_user_model().objects.create_user(
+                    f"{provider_name}-local-user",
+                    email=collision_email,
+                    password="Local-pass-42",
+                )
+                collision_client = Client()
+                collision_response = self.complete_callback(
+                    collision_client,
+                    login_route,
+                    callback_route,
+                    adapter_class,
+                    self.provider_payload(
+                        provider_name,
+                        f"{provider_name}-different-identity",
+                        collision_email,
+                    ),
+                )
+
+                self.assertNotEqual(
+                    collision_client.session.get("_auth_user_id"),
+                    str(local_user.pk),
+                )
+                self.assertFalse(
+                    SocialAccount.objects.filter(user=local_user).exists()
+                )
+                self.assertIn(collision_response.status_code, (200, 302))

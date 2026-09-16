@@ -98,12 +98,24 @@ class ProductionSettingsTests(SimpleTestCase):
         )
         return environment
 
-    @classmethod
-    def load_settings(cls, **values):
-        environment = cls.production_environment(**values)
+    @staticmethod
+    def settings_snapshot(environment):
         script = """
 import json
 from django.conf import settings
+
+provider_apps = {}
+for provider_name, provider_settings in settings.SOCIALACCOUNT_PROVIDERS.items():
+    apps = provider_settings.get("APPS", [])
+    provider_apps[provider_name] = [
+        {
+            "name": app.get("name"),
+            "client_id_configured": bool(app.get("client_id")),
+            "secret_configured": bool(app.get("secret")),
+            "key": app.get("key"),
+        }
+        for app in apps
+    ]
 
 print(json.dumps({
     "debug": settings.DEBUG,
@@ -113,6 +125,7 @@ print(json.dumps({
     "secure_csrf": settings.CSRF_COOKIE_SECURE,
     "ssl_redirect": settings.SECURE_SSL_REDIRECT,
     "mail_backend": settings.MAILERS["default"]["BACKEND"],
+    "provider_apps": provider_apps,
 }))
 """
         return subprocess.run(
@@ -123,6 +136,19 @@ print(json.dumps({
             text=True,
             check=False,
         )
+
+    @classmethod
+    def load_settings(cls, **values):
+        return cls.settings_snapshot(cls.production_environment(**values))
+
+    @classmethod
+    def load_development_settings(cls, **values):
+        environment = cls.production_environment(
+            DJANGO_ENV="development",
+            DJANGO_SECRET_KEY="development-test-secret",
+            **values,
+        )
+        return cls.settings_snapshot(environment)
 
     @classmethod
     def run_deployment_check(cls):
@@ -264,6 +290,73 @@ print(json.dumps({
 
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("GOOGLE_OAUTH_CLIENT", result.stderr)
+
+    def test_complete_provider_credentials_build_settings_backed_apps(self):
+        result = self.load_development_settings(
+            GOOGLE_OAUTH_CLIENT_ID="test-google-client-id",
+            GOOGLE_OAUTH_CLIENT_SECRET="test-google-client-secret",
+            GITHUB_OAUTH_CLIENT_ID="test-github-client-id",
+            GITHUB_OAUTH_CLIENT_SECRET="test-github-client-secret",
+        )
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        configured = json.loads(result.stdout)
+        self.assertEqual(
+            configured["provider_apps"],
+            {
+                "google": [
+                    {
+                        "name": "Hangarin Google",
+                        "client_id_configured": True,
+                        "secret_configured": True,
+                        "key": "",
+                    }
+                ],
+                "github": [
+                    {
+                        "name": "Hangarin GitHub",
+                        "client_id_configured": True,
+                        "secret_configured": True,
+                        "key": "",
+                    }
+                ],
+            },
+        )
+        self.assertNotIn("test-google-client-secret", result.stdout)
+        self.assertNotIn("test-github-client-secret", result.stdout)
+
+    def test_incomplete_provider_credentials_are_hidden_in_development(self):
+        scenarios = (
+            {"GOOGLE_OAUTH_CLIENT_ID": "test-google-client-id"},
+            {"GITHUB_OAUTH_CLIENT_SECRET": "test-github-client-secret"},
+        )
+
+        for credentials in scenarios:
+            with self.subTest(credentials=tuple(credentials)):
+                result = self.load_development_settings(**credentials)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                configured = json.loads(result.stdout)
+                self.assertEqual(configured["provider_apps"]["google"], [])
+                self.assertEqual(configured["provider_apps"]["github"], [])
+
+    def test_each_incomplete_provider_pair_fails_closed_in_production(self):
+        scenarios = (
+            ({"GOOGLE_OAUTH_CLIENT_ID": "test-google-client-id"}, "GOOGLE"),
+            ({"GOOGLE_OAUTH_CLIENT_SECRET": "test-google-client-secret"}, "GOOGLE"),
+            ({"GITHUB_OAUTH_CLIENT_ID": "test-github-client-id"}, "GITHUB"),
+            ({"GITHUB_OAUTH_CLIENT_SECRET": "test-github-client-secret"}, "GITHUB"),
+        )
+
+        for credentials, provider_name in scenarios:
+            with self.subTest(provider=provider_name, credentials=tuple(credentials)):
+                result = self.load_settings(
+                    DJANGO_SECRET_KEY=self.production_secret,
+                    DJANGO_ALLOWED_HOSTS="hangarin.example.com",
+                    DJANGO_CSRF_TRUSTED_ORIGINS="https://hangarin.example.com",
+                    **credentials,
+                )
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn(f"{provider_name}_OAUTH_CLIENT", result.stderr)
 
     def test_django_deployment_checks_accept_complete_secure_configuration(self):
         result = self.run_deployment_check()

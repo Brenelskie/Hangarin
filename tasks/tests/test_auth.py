@@ -191,6 +191,41 @@ class AuthenticationContractTests(TestCase):
         self.assertRedirects(post_response, reverse("account_login"))
         self.assertNotIn("_auth_user_id", self.client.session)
 
+    def test_logout_rejects_bad_csrf_without_ending_session(self):
+        client = Client(enforce_csrf_checks=True)
+        client.force_login(self.user)
+        logout_url = reverse("account_logout")
+
+        missing_response = client.post(logout_url)
+        self.assertEqual(missing_response.status_code, 403)
+        self.assertEqual(int(client.session["_auth_user_id"]), self.user.pk)
+
+        client.get(logout_url)
+        token = client.cookies["csrftoken"].value
+        invalid_response = client.post(
+            logout_url,
+            HTTP_X_CSRFTOKEN="invalid-csrf-token",
+            HTTP_ORIGIN="http://testserver",
+        )
+        self.assertEqual(invalid_response.status_code, 403)
+        self.assertEqual(int(client.session["_auth_user_id"]), self.user.pk)
+
+        cross_origin_response = client.post(
+            logout_url,
+            HTTP_X_CSRFTOKEN=token,
+            HTTP_ORIGIN="https://evil.example",
+        )
+        self.assertEqual(cross_origin_response.status_code, 403)
+        self.assertEqual(int(client.session["_auth_user_id"]), self.user.pk)
+
+        accepted_response = client.post(
+            logout_url,
+            HTTP_X_CSRFTOKEN=token,
+            HTTP_ORIGIN="http://testserver",
+        )
+        self.assertRedirects(accepted_response, reverse("account_login"))
+        self.assertNotIn("_auth_user_id", client.session)
+
     def test_signup_and_social_routes_are_mounted(self):
         self.assertEqual(reverse("account_signup"), "/accounts/signup/")
         self.assertEqual(reverse("google_login"), "/accounts/google/login/")
@@ -334,6 +369,69 @@ class LoginInterfaceTests(TestCase):
         self.assertContains(confirmation, "Continue to Google")
         self.assertContains(confirmation, "Cancel and return")
 
+    @override_settings(
+        SOCIALACCOUNT_PROVIDERS={
+            "google": {
+                "APPS": [
+                    {
+                        "client_id": "google-client",
+                        "secret": "google-secret",
+                        "key": "",
+                    }
+                ],
+                "SCOPE": ["profile", "email"],
+                "OAUTH_PKCE_ENABLED": True,
+            },
+            "github": {
+                "APPS": [
+                    {
+                        "client_id": "github-client",
+                        "secret": "github-secret",
+                        "key": "",
+                    }
+                ],
+                "SCOPE": ["user:email"],
+            },
+        }
+    )
+    def test_social_connection_process_is_unavailable_before_provider_redirect(self):
+        user = get_user_model().objects.create_user(
+            "existing-student", password="Current-safe-password-42"
+        )
+        client = Client(enforce_csrf_checks=True)
+        client.force_login(user)
+
+        for route_name in ("google_login", "github_login"):
+            url = f'{reverse(route_name)}?process=connect'
+            with self.subTest(route_name=route_name, method="get"):
+                response = client.get(url)
+                self.assertEqual(response.status_code, 200)
+                self.assertTemplateUsed(
+                    response, "account/feature_unavailable.html"
+                )
+                self.assertContains(
+                    response, "Account connections are not available"
+                )
+                self.assertNotContains(response, "<form")
+
+            with self.subTest(route_name=route_name, method="post", csrf="missing"):
+                self.assertEqual(client.post(url).status_code, 403)
+
+        client.get(reverse("account_change_password"))
+        token = client.cookies["csrftoken"].value
+        for route_name in ("google_login", "github_login"):
+            url = f'{reverse(route_name)}?process=connect'
+            with self.subTest(route_name=route_name, method="post", csrf="present"):
+                response = client.post(url, HTTP_X_CSRFTOKEN=token)
+                self.assertEqual(response.status_code, 403)
+                self.assertContains(
+                    response,
+                    "Account connections are not available",
+                    status_code=403,
+                )
+                self.assertNotIn("accounts.google.com", response.get("Location", ""))
+                self.assertNotIn("github.com", response.get("Location", ""))
+
     def test_social_failure_and_cancel_pages_offer_clear_exits(self):
         pages = (
             (
@@ -391,6 +489,140 @@ class LoginInterfaceTests(TestCase):
             f'href="{reverse("account_login")}"',
             status_code=403,
         )
+
+
+class AccountManagementInterfaceTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.user = get_user_model().objects.create_user(
+            "account-student", password="Current-safe-password-42"
+        )
+        cls.passwordless_user = get_user_model().objects.create_user(
+            "provider-student"
+        )
+        cls.passwordless_user.set_unusable_password()
+        cls.passwordless_user.save(update_fields=["password"])
+
+    def test_deferred_account_features_use_branded_unavailable_page(self):
+        self.client.force_login(self.user)
+        pages = (
+            (reverse("account_email"), "Email management is not available"),
+            (
+                reverse("account_email_verification_sent"),
+                "Email verification is not available",
+            ),
+            (
+                reverse("account_confirm_email", kwargs={"key": "sample-key"}),
+                "Email verification is not available",
+            ),
+            (
+                reverse("account_reset_password"),
+                "Password recovery is not available",
+            ),
+            (
+                reverse("account_reset_password_done"),
+                "Password recovery is not available",
+            ),
+            (
+                reverse("account_reset_password_from_key_done"),
+                "Password recovery is not available",
+            ),
+            (
+                reverse(
+                    "account_reset_password_from_key",
+                    kwargs={"uidb36": "abc", "key": "sample-key"},
+                ),
+                "Password recovery is not available",
+            ),
+            (
+                reverse("socialaccount_connections"),
+                "Account connections are not available",
+            ),
+        )
+
+        for url, heading in pages:
+            with self.subTest(url=url):
+                response = self.client.get(url)
+                self.assertEqual(response.status_code, 200)
+                self.assertTemplateUsed(
+                    response, "account/feature_unavailable.html"
+                )
+                self.assertContains(response, "Hangarin")
+                self.assertContains(response, heading)
+                self.assertContains(
+                    response, f'href="{reverse("dashboard")}"'
+                )
+                self.assertNotContains(response, "<form")
+
+    def test_deferred_account_features_reject_posts_and_keep_csrf_protection(self):
+        client = Client(enforce_csrf_checks=True)
+        client.force_login(self.user)
+        deferred_urls = (
+            reverse("account_email"),
+            reverse("account_reset_password"),
+            reverse("socialaccount_connections"),
+        )
+
+        for url in deferred_urls:
+            with self.subTest(url=url, csrf="missing"):
+                self.assertEqual(client.post(url, {}).status_code, 403)
+
+        client.get(reverse("account_change_password"))
+        token = client.cookies["csrftoken"].value
+        for url in deferred_urls:
+            with self.subTest(url=url, csrf="present"):
+                self.assertEqual(
+                    client.post(url, {}, HTTP_X_CSRFTOKEN=token).status_code,
+                    405,
+                )
+
+    def test_password_change_and_reauthentication_are_branded_and_post_only(self):
+        self.client.force_login(self.user)
+        pages = (
+            (
+                "account_change_password",
+                "account/password_change.html",
+                "Change your password",
+            ),
+            (
+                "account_reauthenticate",
+                "account/reauthenticate.html",
+                "Confirm your identity",
+            ),
+        )
+
+        for route_name, template_name, heading in pages:
+            with self.subTest(route_name=route_name):
+                response = self.client.get(reverse(route_name))
+                self.assertEqual(response.status_code, 200)
+                self.assertTemplateUsed(response, template_name)
+                self.assertContains(response, "Hangarin")
+                self.assertContains(response, heading)
+                self.assertContains(response, 'name="csrfmiddlewaretoken"')
+                self.assertContains(
+                    response, f'action="{reverse(route_name)}"'
+                )
+
+    def test_passwordless_account_gets_branded_set_password_form(self):
+        self.client.force_login(self.passwordless_user)
+
+        response = self.client.get(reverse("account_set_password"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, "account/password_set.html")
+        self.assertContains(response, "Set a Hangarin password")
+        self.assertContains(response, 'name="csrfmiddlewaretoken"')
+        self.assertContains(
+            response, f'action="{reverse("account_set_password")}"'
+        )
+
+    def test_inactive_account_page_is_branded(self):
+        response = self.client.get(reverse("account_inactive"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, "account/account_inactive.html")
+        self.assertContains(response, "This account is inactive")
+        self.assertContains(response, f'href="{reverse("account_login")}"')
 
 
 class AuthenticationInterfaceTests(TestCase):
