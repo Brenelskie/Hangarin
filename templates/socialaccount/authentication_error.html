@@ -1,0 +1,11 @@
+{% extends "account/base_auth.html" %}
+{% block account_title %}Provider sign-in failed{% endblock %}
+{% block account_content %}
+<p class="eyebrow danger-eyebrow">Sign-in interrupted</p>
+<h2 id="account-heading">The provider could not sign you in</h2>
+<p class="muted">No Hangarin data was changed. Return to sign in and try again, or use your username and password.</p>
+<div class="stack-form auth-form" aria-labelledby="account-heading">
+    <a class="button button-primary button-wide" href="{% url 'account_login' %}">Return to sign in</a>
+    <a class="button button-secondary button-wide" href="{% url 'account_signup' %}">Create a regular account</a>
+</div>
+{% endblock %}

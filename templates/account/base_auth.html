@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block title %}{% block account_title %}Account{% endblock %} &middot; Hangarin{% endblock %}
+{% block page %}
+<a class="skip-link" href="#main-content">Skip to main content</a>
+<main id="main-content" class="auth-main" tabindex="-1">
+<div class="login-layout">
+    <section class="login-story" aria-labelledby="login-story-title">
+        <a class="brand brand-light" href="{% url 'account_login' %}" aria-label="Hangarin sign in">
+            <span class="brand-mark" aria-hidden="true"><span></span></span>
+            <span><strong>Hangarin</strong><small>Turn aims into action</small></span>
+        </a>
+        <div class="horizon-art" aria-hidden="true"><span></span><span></span><span></span></div>
+        <div class="story-copy">
+            <p class="eyebrow">A clearer path forward</p>
+            <h1 id="login-story-title">Give every goal a next step.</h1>
+            <p>Keep deadlines, notes, and smaller actions together in one shared workspace.</p>
+        </div>
+    </section>
+    <section class="login-panel" aria-label="Hangarin account">
+        <div class="login-card">
+            {% if messages %}
+                <div class="message-stack" aria-live="polite">
+                    {% for message in messages %}<div class="message message-{{ message.tags|default:'info' }}" role="status">{{ message }}</div>{% endfor %}
+                </div>
+            {% endif %}
+            {% block account_content %}{% endblock %}
+        </div>
+    </section>
+</div>
+</main>
+{% endblock %}

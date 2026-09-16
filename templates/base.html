@@ -12,6 +12,7 @@
     <script src="{% static 'tasks/js/hangarin.js' %}" defer></script>
 </head>
 <body class="{% if user.is_authenticated %}app-page{% else %}auth-page{% endif %}">
+    {% block page %}
     <a class="skip-link" href="#main-content">Skip to main content</a>
     {% if user.is_authenticated %}
         <div class="app-shell">
@@ -39,7 +40,7 @@
                 <div class="sidebar-user">
                     <span class="avatar" aria-hidden="true">{{ user.username|first|upper }}</span>
                     <span><strong>{{ user.get_full_name|default:user.username }}</strong><small>Signed in</small></span>
-                    <form action="{% url 'logout' %}" method="post">
+                    <form action="{% url 'account_logout' %}" method="post">
                         {% csrf_token %}
                         <button class="text-button" type="submit">Log out</button>
                     </form>
@@ -69,5 +70,6 @@
             {% block auth_content %}{% block content_public %}{% endblock %}{% endblock %}
         </main>
     {% endif %}
+    {% endblock %}
 </body>
 </html>

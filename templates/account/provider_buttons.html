@@ -1,0 +1,18 @@
+{% load socialaccount %}
+{% get_providers as socialaccount_providers %}
+{% if socialaccount_providers %}
+    <div class="auth-divider"><span>or continue with</span></div>
+    <div class="provider-list" aria-label="Social sign in options">
+        {% for provider in socialaccount_providers %}
+            {% provider_login_url provider.id process="login" as provider_url %}
+            <form method="post" action="{{ provider_url }}" class="provider-form">
+                {% csrf_token %}
+                {% if redirect_field_value %}<input type="hidden" name="{{ redirect_field_name }}" value="{{ redirect_field_value }}">{% endif %}
+                <button class="provider-button provider-{{ provider.id }}" type="submit">
+                    <span class="provider-mark" aria-hidden="true">{% if provider.id == "google" %}G{% elif provider.id == "github" %}GH{% else %}&#8226;{% endif %}</span>
+                    <span>Continue with {{ provider.name }}</span>
+                </button>
+            </form>
+        {% endfor %}
+    </div>
+{% endif %}

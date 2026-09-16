@@ -1,0 +1,11 @@
+{% extends "account/base_auth.html" %}
+{% block account_title %}Provider sign-in cancelled{% endblock %}
+{% block account_content %}
+<p class="eyebrow">Sign-in cancelled</p>
+<h2 id="account-heading">You stayed in Hangarin</h2>
+<p class="muted">The provider sign-in was cancelled before any account changes were made.</p>
+<div class="stack-form auth-form" aria-labelledby="account-heading">
+    <a class="button button-primary button-wide" href="{% url 'account_login' %}">Return to sign in</a>
+    <a class="button button-secondary button-wide" href="{% url 'account_signup' %}">Create a regular account</a>
+</div>
+{% endblock %}

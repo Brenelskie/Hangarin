@@ -1,0 +1,22 @@
+{% extends "account/base_auth.html" %}
+{% block account_title %}Create account{% endblock %}
+{% block account_content %}
+<p class="eyebrow">Join the workspace</p>
+<h2 id="account-heading">Create a regular account</h2>
+<p class="muted">Choose a username and password. Registration never creates an administrator account.</p>
+<form method="post" action="{% url 'account_signup' %}" class="stack-form auth-form" novalidate aria-labelledby="account-heading">
+    {% csrf_token %}
+    {{ redirect_field }}
+    {% include "includes/form_fields.html" with form=form %}
+    <button class="button button-primary button-wide" type="submit">Create account</button>
+</form>
+{% include "account/provider_buttons.html" %}
+<div class="account-switch">
+    <strong>Already have an account?</strong>
+    <a href="{% url 'account_login' %}">Return to sign in</a>
+</div>
+<aside class="shared-workspace-warning">
+    <strong>Before you join</strong>
+    <p>This is one shared task workspace. Do not add private or sensitive information.</p>
+</aside>
+{% endblock %}

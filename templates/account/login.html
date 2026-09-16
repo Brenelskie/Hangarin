@@ -1,0 +1,23 @@
+{% extends "account/base_auth.html" %}
+{% block account_title %}Sign in{% endblock %}
+{% block account_content %}
+<p class="eyebrow">Welcome back</p>
+<h2 id="account-heading">Sign in to Hangarin</h2>
+<p class="muted">Use your username and password, or a configured provider.</p>
+<form method="post" action="{% url 'account_login' %}" class="stack-form auth-form" novalidate aria-labelledby="account-heading">
+    {% csrf_token %}
+    {{ redirect_field }}
+    {% include "account/login_fields.html" with form=form %}
+    <button class="button button-primary button-wide" type="submit">Sign in</button>
+</form>
+{% include "account/provider_buttons.html" %}
+<div class="account-switch">
+    <strong>New to Hangarin?</strong>
+    <a href="{% url 'account_signup' %}">Create a regular account</a>
+</div>
+<aside class="shared-workspace-warning">
+    <strong>Shared workspace</strong>
+    <p>Tasks, notes, categories, and priorities are visible to every signed-in user.</p>
+</aside>
+<p class="login-help">Need help signing in? Ask a Hangarin administrator to restore access.</p>
+{% endblock %}

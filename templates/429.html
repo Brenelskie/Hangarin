@@ -1,0 +1,10 @@
+{% extends "account/base_auth.html" %}
+{% block account_title %}Please wait{% endblock %}
+{% block account_content %}
+<p class="eyebrow danger-eyebrow">Too many attempts</p>
+<h2 id="account-heading">Pause before trying again</h2>
+<p class="muted">Hangarin temporarily limited this action to protect your account. Wait a few minutes, then try again.</p>
+<div class="stack-form auth-form" aria-labelledby="account-heading">
+    <a class="button button-primary button-wide" href="{% url 'account_login' %}">Return to sign in</a>
+</div>
+{% endblock %}

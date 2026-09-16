@@ -1,0 +1,13 @@
+{% extends "account/base_auth.html" %}
+{% block account_title %}Sign out{% endblock %}
+{% block account_content %}
+<p class="eyebrow">Account security</p>
+<h2 id="account-heading">Sign out of Hangarin?</h2>
+<p class="muted">Your work is saved. You will need to sign in again to open the shared workspace.</p>
+<form method="post" action="{% url 'account_logout' %}" class="stack-form auth-form" aria-labelledby="account-heading">
+    {% csrf_token %}
+    {{ redirect_field }}
+    <button class="button button-primary button-wide" type="submit">Sign out</button>
+    <a class="button button-secondary button-wide" href="{% url 'dashboard' %}">Return to dashboard</a>
+</form>
+{% endblock %}

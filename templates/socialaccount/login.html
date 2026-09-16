@@ -1,0 +1,20 @@
+{% extends "account/base_auth.html" %}
+{% block account_title %}Continue with {{ provider.name }}{% endblock %}
+{% block account_content %}
+<p class="eyebrow">External account</p>
+<h2 id="account-heading">Continue with {{ provider.name }}?</h2>
+{% if process == "connect" %}
+    <p class="muted">Hangarin will connect this {{ provider.name }} account to your signed-in account.</p>
+{% else %}
+    <p class="muted">You will leave Hangarin briefly to confirm your identity with {{ provider.name }}.</p>
+{% endif %}
+<aside class="shared-workspace-warning">
+    <strong>Shared workspace</strong>
+    <p>Signing in gives access to the same tasks and notes used by every Hangarin member.</p>
+</aside>
+<form method="post" class="stack-form auth-form" aria-labelledby="account-heading">
+    {% csrf_token %}
+    <button class="button button-primary button-wide" type="submit">Continue to {{ provider.name }}</button>
+    <a class="button button-secondary button-wide" href="{% url 'account_login' %}">Cancel and return</a>
+</form>
+{% endblock %}

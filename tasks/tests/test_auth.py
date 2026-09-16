@@ -290,6 +290,86 @@ class LoginInterfaceTests(TestCase):
         self.assertNotContains(response, "Continue with Google")
         self.assertNotContains(response, "Continue with GitHub")
 
+    @override_settings(
+        SOCIALACCOUNT_PROVIDERS={
+            "google": {
+                "APPS": [
+                    {
+                        "client_id": "google-client",
+                        "secret": "google-secret",
+                        "key": "",
+                    }
+                ],
+                "SCOPE": ["profile", "email"],
+                "OAUTH_PKCE_ENABLED": True,
+            },
+            "github": {
+                "APPS": [
+                    {
+                        "client_id": "github-client",
+                        "secret": "github-secret",
+                        "key": "",
+                    }
+                ],
+                "SCOPE": ["user:email"],
+            },
+        }
+    )
+    def test_configured_provider_buttons_are_post_forms_with_csrf(self):
+        response = self.client.get(reverse("account_login"))
+
+        self.assertContains(response, "Continue with Google")
+        self.assertContains(response, "Continue with GitHub")
+        self.assertContains(
+            response, f'action="{reverse("google_login")}?process=login"'
+        )
+        self.assertContains(
+            response, f'action="{reverse("github_login")}?process=login"'
+        )
+        self.assertContains(response, 'name="csrfmiddlewaretoken"', count=3)
+        self.assertNotContains(response, f'href="{reverse("google_login")}"')
+        self.assertNotContains(response, f'href="{reverse("github_login")}"')
+
+        confirmation = self.client.get(reverse("google_login"))
+        self.assertContains(confirmation, "Continue to Google")
+        self.assertContains(confirmation, "Cancel and return")
+
+    def test_social_failure_and_cancel_pages_offer_clear_exits(self):
+        pages = (
+            (
+                "socialaccount_login_error",
+                "The provider could not sign you in",
+                401,
+            ),
+            ("socialaccount_login_cancelled", "You stayed in Hangarin", 200),
+        )
+
+        for route_name, heading, status_code in pages:
+            with self.subTest(route_name=route_name):
+                response = self.client.get(reverse(route_name))
+                self.assertEqual(response.status_code, status_code)
+                self.assertContains(response, heading, status_code=status_code)
+                self.assertContains(
+                    response,
+                    f'href="{reverse("account_login")}"',
+                    status_code=status_code,
+                )
+                self.assertContains(
+                    response, "Create a regular account", status_code=status_code
+                )
+
+    def test_signup_explains_regular_shared_account_and_no_password_reset_link(self):
+        response = self.client.get(reverse("account_signup"))
+
+        self.assertContains(response, "Create a regular account")
+        self.assertContains(response, "Registration never creates an administrator account")
+        self.assertContains(response, "shared task workspace")
+        self.assertNotContains(response, "password/reset")
+
+        login_response = self.client.get(reverse("account_login"))
+        self.assertContains(login_response, "Ask a Hangarin administrator")
+        self.assertNotContains(login_response, "password/reset")
+
     @override_settings(DEBUG=False)
     def test_csrf_failure_uses_branded_safe_response(self):
         client = Client(enforce_csrf_checks=True)
@@ -341,3 +421,13 @@ class AuthenticationInterfaceTests(TestCase):
         self.assertContains(response, 'aria-controls="primary-navigation"')
         self.assertContains(response, 'aria-expanded="false"')
         self.assertContains(response, "hangarin.js")
+
+    def test_authenticated_logout_confirmation_uses_account_ui(self):
+        self.client.force_login(self.user)
+
+        response = self.client.get(reverse("account_logout"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Sign out of Hangarin?")
+        self.assertContains(response, f'action="{reverse("account_logout")}"')
+        self.assertContains(response, "Return to dashboard")
