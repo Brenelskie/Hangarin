@@ -1,5 +1,6 @@
 from django.contrib import admin
 from django.contrib.auth import get_user_model
+from django.contrib.auth.models import Group, Permission
 from django.test import RequestFactory, TestCase
 from django.urls import reverse
 from django.utils import timezone
@@ -142,3 +143,85 @@ class AdminConfigurationTests(TestCase):
         )
         self.assertContains(subtask_response, "Parent Task")
         self.assertContains(subtask_response, "Complete Hangarin")
+
+
+class PrivilegeAdministrationTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        user_model = get_user_model()
+        cls.superuser = user_model.objects.create_superuser(
+            username="root-admin",
+            email="root@example.com",
+            password="test-password",
+        )
+        cls.staff_user = user_model.objects.create_user(
+            username="staff-admin",
+            password="test-password",
+            is_staff=True,
+        )
+        privilege_permissions = Permission.objects.filter(
+            content_type__app_label="auth",
+            content_type__model__in=("user", "group"),
+        )
+        cls.staff_user.user_permissions.set(privilege_permissions)
+
+    def permission_request_for(self, user):
+        request = RequestFactory().get("/admin/")
+        request.user = user
+        return request
+
+    def assert_privilege_admin_permissions(self, user, expected):
+        request = self.permission_request_for(user)
+        for model in (get_user_model(), Group):
+            model_admin = admin.site._registry[model]
+            checks = (
+                model_admin.has_module_permission,
+                model_admin.has_view_permission,
+                model_admin.has_add_permission,
+                model_admin.has_change_permission,
+                model_admin.has_delete_permission,
+            )
+            for check in checks:
+                with self.subTest(
+                    user=user.username,
+                    model=model.__name__,
+                    permission=check.__name__,
+                ):
+                    self.assertIs(check(request), expected)
+
+    def test_non_superuser_staff_cannot_administer_users_or_groups(self):
+        self.assert_privilege_admin_permissions(self.staff_user, False)
+
+    def test_superuser_retains_user_and_group_administration(self):
+        self.assert_privilege_admin_permissions(self.superuser, True)
+
+    def test_non_superuser_staff_cannot_bypass_restriction_with_direct_urls(self):
+        self.client.force_login(self.staff_user)
+        target_user = get_user_model().objects.create_user(username="target-user")
+        target_group = Group.objects.create(name="Target group")
+        restricted_urls = (
+            reverse("admin:auth_user_changelist"),
+            reverse("admin:auth_user_add"),
+            reverse("admin:auth_user_change", args=(target_user.pk,)),
+            reverse("admin:auth_user_delete", args=(target_user.pk,)),
+            reverse("admin:auth_group_changelist"),
+            reverse("admin:auth_group_add"),
+            reverse("admin:auth_group_change", args=(target_group.pk,)),
+            reverse("admin:auth_group_delete", args=(target_group.pk,)),
+        )
+
+        for url in restricted_urls:
+            with self.subTest(url=url):
+                self.assertEqual(self.client.get(url).status_code, 403)
+
+    def test_superuser_can_open_user_and_group_admin_pages(self):
+        self.client.force_login(self.superuser)
+
+        for url in (
+            reverse("admin:auth_user_changelist"),
+            reverse("admin:auth_user_add"),
+            reverse("admin:auth_group_changelist"),
+            reverse("admin:auth_group_add"),
+        ):
+            with self.subTest(url=url):
+                self.assertEqual(self.client.get(url).status_code, 200)

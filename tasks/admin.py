@@ -1,6 +1,46 @@
 from django.contrib import admin
+from django.contrib.auth import get_user_model
+from django.contrib.auth.admin import GroupAdmin, UserAdmin
+from django.contrib.auth.models import Group
 
 from .models import Category, Note, Priority, SubTask, Task
+
+
+class SuperuserOnlyPrivilegeAdminMixin:
+    """Reserve account and role administration for active superusers."""
+
+    def has_module_permission(self, request):
+        return request.user.is_superuser and super().has_module_permission(request)
+
+    def has_view_permission(self, request, obj=None):
+        return request.user.is_superuser and super().has_view_permission(request, obj)
+
+    def has_add_permission(self, request):
+        return request.user.is_superuser and super().has_add_permission(request)
+
+    def has_change_permission(self, request, obj=None):
+        return request.user.is_superuser and super().has_change_permission(request, obj)
+
+    def has_delete_permission(self, request, obj=None):
+        return request.user.is_superuser and super().has_delete_permission(request, obj)
+
+
+class SuperuserOnlyUserAdmin(SuperuserOnlyPrivilegeAdminMixin, UserAdmin):
+    pass
+
+
+class SuperuserOnlyGroupAdmin(SuperuserOnlyPrivilegeAdminMixin, GroupAdmin):
+    pass
+
+
+user_model = get_user_model()
+if admin.site.is_registered(user_model):
+    admin.site.unregister(user_model)
+admin.site.register(user_model, SuperuserOnlyUserAdmin)
+
+if admin.site.is_registered(Group):
+    admin.site.unregister(Group)
+admin.site.register(Group, SuperuserOnlyGroupAdmin)
 
 
 @admin.register(Task)
