@@ -19,6 +19,7 @@ from hangarin.account_adapters import (
     HangarinAccountAdapter,
     HangarinSocialAccountAdapter,
 )
+from hangarin.forms import HangarinSocialSignupForm
 
 
 def request_with_session(path="/"):
@@ -30,6 +31,61 @@ def request_with_session(path="/"):
 
 def csrf_failure_for_test(request, reason=""):
     return HttpResponse(status=403)
+
+
+class SocialSignupFormTests(TestCase):
+    @override_settings(
+        SOCIALACCOUNT_PROVIDERS={
+            "google": {
+                "APPS": [
+                    {
+                        "client_id": "test-client",
+                        "secret": "test-secret",
+                        "key": "",
+                    }
+                ],
+                "SCOPE": ["profile", "email"],
+                "OAUTH_PKCE_ENABLED": True,
+            }
+        }
+    )
+    def test_social_signup_form_supports_username_only_accounts(self):
+        provider = GoogleProvider(
+            request=request_with_session(),
+            app=SocialApp(
+                provider="google",
+                name="Google",
+                client_id="test-client",
+                secret="test-secret",
+            ),
+        )
+        self.assertEqual(
+            settings.SOCIALACCOUNT_FORMS["signup"],
+            "hangarin.forms.HangarinSocialSignupForm",
+        )
+        sociallogin = SocialLogin(
+            user=get_user_model()(
+                username="google-user",
+                email="google-user@example.com",
+            ),
+            account=SocialAccount(provider="google", uid="google-user"),
+            provider=provider,
+        )
+
+        form = HangarinSocialSignupForm(sociallogin=sociallogin)
+
+        self.assertIn("username", form.fields)
+        self.assertNotIn("email", form.fields)
+
+        session = self.client.session
+        session["socialaccount_sociallogin"] = sociallogin.serialize()
+        session.save()
+
+        response = self.client.get(reverse("socialaccount_signup"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, "socialaccount/signup.html")
+        self.assertContains(response, "Choose your Hangarin username")
 
 
 class LocalRegistrationTests(TestCase):
@@ -192,6 +248,7 @@ class PrivilegeAdapterTests(TestCase):
 
 
 class SocialProviderConfigurationTests(TestCase):
+    @override_settings(SOCIALACCOUNT_PROVIDERS={})
     def test_unconfigured_providers_are_not_listed(self):
         request = request_with_session()
 

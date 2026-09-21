@@ -271,6 +271,9 @@ SOCIALACCOUNT_LOGIN_ON_GET = False
 SOCIALACCOUNT_STORE_TOKENS = False
 SOCIALACCOUNT_EMAIL_AUTHENTICATION = False
 SOCIALACCOUNT_EMAIL_AUTHENTICATION_AUTO_CONNECT = False
+SOCIALACCOUNT_FORMS = {
+    "signup": "hangarin.forms.HangarinSocialSignupForm",
+}
 
 
 def social_oauth_app(provider_name, client_id_name, client_secret_name):

@@ -1,15 +1,18 @@
 {% extends "account/base_auth.html" %}
-{% block account_title %}Finish account setup{% endblock %}
+{% block account_title %}Finish sign in{% endblock %}
 {% block account_content %}
-<p class="eyebrow">One final step</p>
+<p class="eyebrow">One last step</p>
 <h2 id="account-heading">Choose your Hangarin username</h2>
-<p class="muted">Your {{ account.get_provider.name }} identity is ready. Choose the username you will use inside Hangarin.</p>
-<form method="post" action="{% url 'socialaccount_signup' %}" class="stack-form auth-form" novalidate aria-labelledby="account-heading">
+<p class="muted">Your provider confirmed your identity. Choose the username you will use in the shared workspace.</p>
+<form method="post" class="stack-form auth-form" novalidate aria-labelledby="account-heading">
     {% csrf_token %}
     {{ redirect_field }}
-    {% include "includes/form_fields.html" with form=form %}
-    <button class="button button-primary button-wide" type="submit">Create regular account</button>
-    <a class="button button-secondary button-wide" href="{% url 'account_login' %}">Return to sign in</a>
+    {% include "includes/form_fields.html" with form=form hide_help_for="password" %}
+    <button class="button button-primary button-wide" type="submit">Finish sign in</button>
 </form>
-<p class="login-help">Already use Hangarin? Return to sign in and use your existing sign-in method. Accounts are not merged automatically.</p>
+<aside class="shared-workspace-warning">
+    <strong>Regular account</strong>
+    <p>Google and GitHub sign-in create a regular Hangarin account, never an administrator account.</p>
+</aside>
+<p class="login-help">Changed your mind? <a href="{% url 'account_login' %}">Return to sign in</a>.</p>
 {% endblock %}

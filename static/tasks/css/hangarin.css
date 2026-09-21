@@ -201,12 +201,16 @@ th.actions-column { background: #edf2f7; }
 .checkbox-field label { margin: 0; }
 .auth-divider { display: flex; align-items: center; gap: .8rem; margin: 1.35rem 0 1rem; color: var(--muted); font-family: var(--utility); font-size: .68rem; letter-spacing: .08em; text-transform: uppercase; }
 .auth-divider::before, .auth-divider::after { content: ""; flex: 1; height: 1px; background: var(--line); }
-.provider-list { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: .65rem; }
+.provider-list { display: grid; grid-template-columns: 1fr; gap: .65rem; }
 .provider-form { margin: 0; }
-.provider-button { width: 100%; min-height: 48px; display: flex; align-items: center; justify-content: center; gap: .55rem; padding: .65rem .75rem; color: var(--ink); background: #fff; border: 1px solid #bac9d7; border-radius: 10px; cursor: pointer; font-weight: 800; }
-.provider-button:hover { background: #f8fafc; border-color: #8da4b8; }
+.provider-button { width: 100%; min-height: 52px; display: grid; grid-template-columns: 30px 1fr 30px; align-items: center; gap: .7rem; padding: .65rem .85rem; color: var(--ink); background: #fff; border: 1px solid #bac9d7; border-radius: 10px; cursor: pointer; font-weight: 800; box-shadow: 0 5px 14px rgba(16, 37, 62, .05); transition: border-color .16s ease, background-color .16s ease, box-shadow .16s ease, transform .16s ease; }
+.provider-button:hover { background: #f8fafc; border-color: #8da4b8; box-shadow: 0 8px 18px rgba(16, 37, 62, .10); transform: translateY(-1px); }
+.provider-button > span:last-child { grid-column: 2; text-align: center; }
 .provider-mark { min-width: 28px; height: 28px; display: grid; place-items: center; color: #fff; background: var(--ink); border-radius: 50%; font-family: var(--utility); font-size: .68rem; font-weight: 900; }
 .provider-google .provider-mark { color: #174ea6; background: #eef3ff; border: 1px solid #cddcff; }
+.provider-github { color: #fff; background: #182535; border-color: #182535; }
+.provider-github:hover { color: #fff; background: #26394d; border-color: #26394d; }
+.provider-github .provider-mark { color: #182535; background: #fff; }
 .account-switch { display: flex; flex-wrap: wrap; justify-content: space-between; gap: .35rem 1rem; margin-top: 1.25rem; padding-top: 1rem; border-top: 1px solid var(--line); font-size: .9rem; }
 .account-switch a { font-weight: 800; }
 .shared-workspace-warning { margin-top: 1rem; padding: .85rem 1rem; color: #24435f; background: #fff8df; border-left: 4px solid var(--marigold); border-radius: 8px; }
@@ -255,7 +259,6 @@ th.actions-column { background: #edf2f7; }
     .login-story { min-height: 420px; padding: 1.5rem; }
     .login-panel { min-height: auto; padding: 1rem; }
     .login-card { padding: 1.4rem; border-radius: 16px; }
-    .provider-list { grid-template-columns: 1fr; }
     .form-actions .button { flex: 1 1 100%; }
 }
 @media (prefers-reduced-motion: reduce) {

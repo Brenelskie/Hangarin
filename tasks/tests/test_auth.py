@@ -312,6 +312,7 @@ class AuthenticationContractTests(TestCase):
 
 
 class LoginInterfaceTests(TestCase):
+    @override_settings(SOCIALACCOUNT_PROVIDERS={})
     def test_login_is_hangarin_branded_and_links_public_signup(self):
         response = self.client.get(reverse("account_login"))
 
@@ -632,6 +633,7 @@ class AuthenticationInterfaceTests(TestCase):
             "student", password="secret123"
         )
 
+    @override_settings(SOCIALACCOUNT_PROVIDERS={})
     def test_login_uses_hangarin_brand_without_social_or_psusphere_copy(self):
         response = self.client.get(reverse("account_login"))
 
