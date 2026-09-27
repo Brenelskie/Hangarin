@@ -326,6 +326,32 @@ class LoginInterfaceTests(TestCase):
         self.assertNotContains(response, "Continue with Google")
         self.assertNotContains(response, "Continue with GitHub")
 
+    def test_signup_link_preserves_safe_next_through_registration(self):
+        return_url = reverse("task-add")
+        login_response = self.client.get(
+            reverse("account_login"),
+            {"next": return_url},
+        )
+        signup_url = login_response.context["signup_url"]
+
+        self.assertIn("next=", signup_url)
+        self.assertContains(login_response, f'href="{signup_url}"')
+
+        signup_response = self.client.get(signup_url)
+        self.assertContains(signup_response, 'name="next"')
+        self.assertContains(signup_response, f'value="{return_url}"')
+
+        completed = self.client.post(
+            reverse("account_signup"),
+            {
+                "username": "returning-new-student",
+                "password1": "A-safe-study-password-42",
+                "password2": "A-safe-study-password-42",
+                "next": return_url,
+            },
+        )
+        self.assertRedirects(completed, return_url)
+
     @override_settings(
         SOCIALACCOUNT_PROVIDERS={
             "google": {
@@ -424,6 +450,21 @@ class LoginInterfaceTests(TestCase):
             url = f'{reverse(route_name)}?process=connect'
             with self.subTest(route_name=route_name, method="post", csrf="present"):
                 response = client.post(url, HTTP_X_CSRFTOKEN=token)
+                self.assertEqual(response.status_code, 403)
+                self.assertContains(
+                    response,
+                    "Account connections are not available",
+                    status_code=403,
+                )
+                self.assertNotIn("accounts.google.com", response.get("Location", ""))
+                self.assertNotIn("github.com", response.get("Location", ""))
+
+            with self.subTest(route_name=route_name, method="post-body"):
+                response = client.post(
+                    reverse(route_name),
+                    {"process": "connect"},
+                    HTTP_X_CSRFTOKEN=token,
+                )
                 self.assertEqual(response.status_code, 403)
                 self.assertContains(
                     response,

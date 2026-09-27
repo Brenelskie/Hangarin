@@ -334,6 +334,12 @@ class SocialProviderConfigurationTests(TestCase):
         self.assertFalse(settings.SOCIALACCOUNT_EMAIL_AUTHENTICATION)
         self.assertFalse(settings.SOCIALACCOUNT_EMAIL_AUTHENTICATION_AUTO_CONNECT)
         self.assertFalse(settings.SOCIALACCOUNT_LOGIN_ON_GET)
+        self.assertTrue(
+            settings.SOCIALACCOUNT_PROVIDERS["google"]["OAUTH_PKCE_ENABLED"]
+        )
+        self.assertTrue(
+            settings.SOCIALACCOUNT_PROVIDERS["github"]["OAUTH_PKCE_ENABLED"]
+        )
 
 
 @override_settings(
@@ -358,6 +364,7 @@ class SocialProviderConfigurationTests(TestCase):
                 }
             ],
             "SCOPE": ["user:email"],
+            "OAUTH_PKCE_ENABLED": True,
         },
     }
 )
@@ -379,26 +386,33 @@ class SocialCallbackFlowTests(TestCase):
 
     def provider_payload(self, provider_name, uid, email):
         if provider_name == "google":
-            return {
+            payload = {
                 "sub": uid,
-                "email": email,
-                "email_verified": True,
                 "given_name": "Test",
                 "family_name": "Student",
             }
-        return {
+            if email:
+                payload.update({"email": email, "email_verified": True})
+            return payload
+        payload = {
             "id": uid,
             "login": f"github-{uid}",
             "name": "Test Student",
-            "email": email,
-            "emails": [
+        }
+        if email:
+            payload.update(
                 {
                     "email": email,
-                    "primary": True,
-                    "verified": True,
+                    "emails": [
+                        {
+                            "email": email,
+                            "primary": True,
+                            "verified": True,
+                        }
+                    ],
                 }
-            ],
-        }
+            )
+        return payload
 
     def complete_callback(
         self,
@@ -452,6 +466,12 @@ class SocialCallbackFlowTests(TestCase):
                     adapter_class,
                     self.provider_payload(provider_name, uid, email),
                 )
+
+                if first_response.url == reverse("socialaccount_signup"):
+                    first_response = first_client.post(
+                        reverse("socialaccount_signup"),
+                        {"username": f"{provider_name}-first-user"},
+                    )
 
                 self.assertRedirects(first_response, reverse("dashboard"))
                 social_account = SocialAccount.objects.get(
@@ -517,3 +537,145 @@ class SocialCallbackFlowTests(TestCase):
                     SocialAccount.objects.filter(user=local_user).exists()
                 )
                 self.assertIn(collision_response.status_code, (200, 302))
+
+    def test_duplicate_email_completion_is_blocked_for_both_providers(self):
+        for (
+            provider_name,
+            login_route,
+            callback_route,
+            adapter_class,
+        ) in self.provider_cases:
+            with self.subTest(provider=provider_name):
+                email = f"{provider_name}-collision@example.com"
+                get_user_model().objects.create_user(
+                    f"{provider_name}-existing",
+                    email=email,
+                    password="Local-pass-42",
+                )
+                user_count = get_user_model().objects.count()
+                social_count = SocialAccount.objects.count()
+                client = Client()
+
+                callback_response = self.complete_callback(
+                    client,
+                    login_route,
+                    callback_route,
+                    adapter_class,
+                    self.provider_payload(
+                        provider_name,
+                        f"{provider_name}-collision-identity",
+                        email,
+                    ),
+                )
+
+                self.assertRedirects(
+                    callback_response,
+                    reverse("socialaccount_signup"),
+                    fetch_redirect_response=False,
+                )
+                completion_response = client.post(
+                    reverse("socialaccount_signup"),
+                    {"username": f"{provider_name}-different-person"},
+                )
+
+                self.assertEqual(completion_response.status_code, 200)
+                self.assertTemplateUsed(
+                    completion_response,
+                    "socialaccount/signup.html",
+                )
+                self.assertContains(
+                    completion_response,
+                    "Sign in using the method that created the original account.",
+                )
+                self.assertEqual(get_user_model().objects.count(), user_count)
+                self.assertEqual(SocialAccount.objects.count(), social_count)
+                self.assertNotIn("_auth_user_id", client.session)
+
+    def test_google_and_github_authorization_requests_use_pkce(self):
+        for provider_name, login_route, _, _ in self.provider_cases:
+            with self.subTest(provider=provider_name):
+                client = Client()
+                response = client.post(f'{reverse(login_route)}?process=login')
+
+                self.assertEqual(response.status_code, 302)
+                parameters = parse_qs(urlparse(response.url).query)
+                self.assertEqual(parameters["code_challenge_method"], ["S256"])
+                self.assertTrue(parameters["code_challenge"][0])
+                state_id = parameters["state"][0]
+                state = client.session["socialaccount_states"][state_id][0]
+                self.assertTrue(state["pkce_code_verifier"])
+
+    def test_missing_provider_email_requires_completion_for_both_providers(self):
+        for (
+            provider_name,
+            login_route,
+            callback_route,
+            adapter_class,
+        ) in self.provider_cases:
+            with self.subTest(provider=provider_name):
+                client = Client()
+                user_count = get_user_model().objects.count()
+                social_count = SocialAccount.objects.count()
+
+                response = self.complete_callback(
+                    client,
+                    login_route,
+                    callback_route,
+                    adapter_class,
+                    self.provider_payload(
+                        provider_name,
+                        f"{provider_name}-missing-email",
+                        None,
+                    ),
+                )
+
+                self.assertRedirects(
+                    response,
+                    reverse("socialaccount_signup"),
+                    fetch_redirect_response=False,
+                )
+                completion = client.get(reverse("socialaccount_signup"))
+                self.assertEqual(completion.status_code, 200)
+                self.assertTemplateUsed(completion, "socialaccount/signup.html")
+                self.assertEqual(get_user_model().objects.count(), user_count)
+                self.assertEqual(SocialAccount.objects.count(), social_count)
+                self.assertNotIn("_auth_user_id", client.session)
+
+    def test_conflicting_github_username_requires_completion(self):
+        get_user_model().objects.create_user(
+            "taken-provider-name",
+            password="Local-pass-42",
+        )
+        client = Client()
+        payload = self.provider_payload(
+            "github",
+            "github-conflicting-username",
+            "unique-provider@example.com",
+        )
+        payload["login"] = "taken-provider-name"
+        user_count = get_user_model().objects.count()
+
+        response = self.complete_callback(
+            client,
+            "github_login",
+            "github_callback",
+            GitHubOAuth2Adapter,
+            payload,
+        )
+
+        self.assertRedirects(
+            response,
+            reverse("socialaccount_signup"),
+            fetch_redirect_response=False,
+        )
+        completion = client.get(reverse("socialaccount_signup"))
+        self.assertEqual(completion.status_code, 200)
+        self.assertTemplateUsed(completion, "socialaccount/signup.html")
+        self.assertEqual(get_user_model().objects.count(), user_count)
+        self.assertFalse(
+            SocialAccount.objects.filter(
+                provider="github",
+                uid="github-conflicting-username",
+            ).exists()
+        )
+        self.assertNotIn("_auth_user_id", client.session)

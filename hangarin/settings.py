@@ -313,6 +313,7 @@ SOCIALACCOUNT_PROVIDERS = {
             'GITHUB_OAUTH_CLIENT_SECRET',
         ),
         'SCOPE': ['user:email'],
+        'OAUTH_PKCE_ENABLED': True,
     },
 }
 

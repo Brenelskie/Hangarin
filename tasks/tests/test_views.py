@@ -1,12 +1,14 @@
 from datetime import timedelta
+from unittest.mock import Mock, patch
 
 from django.contrib.auth import get_user_model
 from django.contrib.messages import get_messages
 from django.template.loader import get_template
-from django.test import TestCase, override_settings
+from django.test import TestCase, TransactionTestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 
+from tasks.forms import CategoryForm, PriorityForm
 from tasks.models import Category, Note, Priority, StatusChoices, SubTask, Task
 from tasks.tests.test_auth import TEST_TEMPLATES
 
@@ -461,6 +463,71 @@ class TaskQueryContractTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertTrue(Note.objects.filter(pk=note.pk).exists())
+
+
+@override_settings(TEMPLATES=TEST_TEMPLATES)
+class ConcurrentMutationRegressionTests(TransactionTestCase):
+    def setUp(self):
+        self.user = get_user_model().objects.create_user(
+            "race-user",
+            password="secret123",
+        )
+        self.client.force_login(self.user)
+
+    def test_lookup_uniqueness_conflicts_return_field_errors(self):
+        cases = (
+            (Priority, PriorityForm, "priority-add", "duplicate-priority"),
+            (Category, CategoryForm, "category-add", "duplicate-category"),
+        )
+        for model, form_class, route_name, name in cases:
+            with self.subTest(model=model.__name__):
+                model.objects.create(name=name)
+                with patch.object(form_class, "validate_unique", return_value=None):
+                    response = self.client.post(
+                        reverse(route_name),
+                        {"name": name},
+                    )
+
+                self.assertEqual(response.status_code, 200)
+                self.assertIn("name", response.context["form"].errors)
+                self.assertContains(response, "with this name already exists")
+                self.assertEqual(model.objects.filter(name=name).count(), 1)
+
+    def test_task_delete_is_idempotent_when_row_disappears_after_lookup(self):
+        priority = Priority.objects.create(name="race-priority")
+        category = Category.objects.create(name="race-category")
+        task = Task.objects.create(
+            title="Delete race",
+            description="A second confirmation should not fail.",
+            deadline=timezone.now(),
+            priority=priority,
+            category=category,
+        )
+        delete_url = reverse("task-delete", args=(task.pk,))
+        confirmation = self.client.get(delete_url)
+        locked_queryset = Mock()
+
+        def delete_before_lock(**kwargs):
+            Task.objects.filter(pk=task.pk).delete()
+            raise Task.DoesNotExist
+
+        locked_queryset.get.side_effect = delete_before_lock
+        with patch.object(
+            Task.objects,
+            "select_for_update",
+            return_value=locked_queryset,
+        ):
+            response = self.client.post(
+                delete_url,
+                {"related_snapshot": confirmation.context["related_snapshot"]},
+            )
+
+        self.assertRedirects(response, reverse("task-list"))
+        self.assertFalse(Task.objects.filter(pk=task.pk).exists())
+        self.assertIn(
+            "already deleted",
+            " ".join(str(message) for message in get_messages(response.wsgi_request)),
+        )
 
 
 class InterfaceTemplateTests(TestCase):

@@ -7,9 +7,10 @@ from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.core.exceptions import ImproperlyConfigured
 from django.core.paginator import InvalidPage
-from django.db import transaction
+from django.db import IntegrityError, transaction
 from django.db.models import Count, Q
 from django.db.models.deletion import ProtectedError
+from django.shortcuts import redirect
 from django.urls import reverse
 from django.utils import timezone
 from django.utils.http import url_has_allowed_host_and_scheme
@@ -339,28 +340,41 @@ class TaskUpdateView(TaskFormMixin, UpdateView):
     pass
 
 
-class PriorityCreateView(EntityFormMixin, CreateView):
+class UniqueNameFormMixin(EntityFormMixin):
+    def form_valid(self, form):
+        try:
+            with transaction.atomic():
+                return super().form_valid(form)
+        except IntegrityError:
+            form.add_error(
+                "name",
+                f"A {self.entity_label.lower()} with this name already exists.",
+            )
+            return self.form_invalid(form)
+
+
+class PriorityCreateView(UniqueNameFormMixin, CreateView):
     model = Priority
     form_class = PriorityForm
     entity_label = "Priority"
     default_success_url = "priority-list"
 
 
-class PriorityUpdateView(EntityFormMixin, UpdateView):
+class PriorityUpdateView(UniqueNameFormMixin, UpdateView):
     model = Priority
     form_class = PriorityForm
     entity_label = "Priority"
     default_success_url = "priority-list"
 
 
-class CategoryCreateView(EntityFormMixin, CreateView):
+class CategoryCreateView(UniqueNameFormMixin, CreateView):
     model = Category
     form_class = CategoryForm
     entity_label = "Category"
     default_success_url = "category-list"
 
 
-class CategoryUpdateView(EntityFormMixin, UpdateView):
+class CategoryUpdateView(UniqueNameFormMixin, UpdateView):
     model = Category
     form_class = CategoryForm
     entity_label = "Category"
@@ -475,7 +489,11 @@ class TaskDeleteView(EntityDeleteView):
     def form_valid(self, form):
         submitted_snapshot = self.request.POST.get(self.snapshot_field, "")
         with transaction.atomic():
-            self.object = Task.objects.select_for_update().get(pk=self.object.pk)
+            try:
+                self.object = Task.objects.select_for_update().get(pk=self.object.pk)
+            except Task.DoesNotExist:
+                messages.info(self.request, "This task was already deleted.")
+                return redirect(self.get_success_url())
             self.related_snapshot = self.get_related_snapshot(lock=True)
             if not secrets.compare_digest(
                 submitted_snapshot,
