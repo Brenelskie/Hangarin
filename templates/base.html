@@ -1,10 +1,11 @@
-{% load static %}
+{% load static pwa %}
 <!doctype html>
 <html lang="en" class="no-js">
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="color-scheme" content="light">
+    {% progressive_web_app_meta %}
     <title>{% block title %}Hangarin{% endblock %}</title>
     <link rel="icon" href="{% static 'tasks/img/favicon.svg' %}" type="image/svg+xml">
     <link rel="stylesheet" href="{% static 'tasks/css/hangarin.css' %}">

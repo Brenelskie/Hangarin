@@ -120,5 +120,6 @@ urlpatterns = [
         },
     ),
     path("accounts/", include("allauth.urls")),
+    path("", include("pwa.urls")),
     path("", include("tasks.urls")),
 ]

@@ -2,6 +2,7 @@ asgiref==3.12.1
 Django==6.1.1
 Faker==40.36.0
 django-allauth[socialaccount]==65.19.3
+django-pwa==2.0.1
 python-dotenv==1.2.3
 sqlparse==0.6.0
 tzdata==2026.4

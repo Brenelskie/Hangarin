@@ -34,6 +34,26 @@ requirements.txt          Exact Python dependency versions
 .env.example              Safe environment-variable example
 ```
 
+## Install as a Progressive Web App
+
+Hangarin uses `django-pwa` for its web manifest and service-worker route. On
+HTTPS (or local `localhost`), open the site in a supporting browser and choose
+**Install app** or **Add to Home Screen** from the browser menu. The app uses
+Hangarin's navy-and-gold icons and opens in a standalone window.
+
+When offline, Hangarin shows a branded reconnect page. Tasks, notes, and
+account pages are **not** saved for offline viewing or editing because this is
+a shared workspace and those pages may contain private, changing data. Changes
+made by another user appear after you reconnect and reload.
+
+To verify the PWA after deployment, open `/manifest.json`, `/serviceworker.js`,
+and `/offline/` on the hosted site. In browser developer tools, check
+**Application → Manifest** and **Application → Service workers**, then turn on
+offline mode and open a task page: the offline page should appear without
+displaying cached task data. Re-enable the network afterward. After changing
+the precached asset list or files, increment `CACHE_NAME` in
+`static/tasks/js/serviceworker.js`, run `collectstatic`, and reload the web app.
+
 ## Local setup on Windows
 
 These steps start from a clean checkout and use Python 3.13.
@@ -188,6 +208,7 @@ python --version
 python manage.py check
 python manage.py makemigrations --check --dry-run
 python manage.py test
+node --test tasks/tests/serviceworker.test.cjs
 python manage.py collectstatic --noinput --clear
 git diff --check
 git status --short
@@ -198,6 +219,7 @@ Expected results:
 - Python reports version 3.13.
 - Django reports no system-check issues and no model changes.
 - All tests pass from a fresh test database.
+- Node.js runs the service-worker behavior tests (Django does not discover `.cjs` tests).
 - Static files collect into the ignored `staticfiles/` folder.
 - `git diff --check` reports no whitespace errors.
 - `.env`, `.venv`, `db.sqlite3`, and `staticfiles/` do not appear in Git status.

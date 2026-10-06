@@ -167,6 +167,7 @@ INSTALLED_APPS = [
     'allauth.socialaccount',
     'allauth.socialaccount.providers.google',
     'allauth.socialaccount.providers.github',
+    'pwa',
     'tasks',
 ]
 
@@ -249,6 +250,27 @@ USE_TZ = True
 STATIC_URL = '/static/'
 STATIC_ROOT = BASE_DIR / 'staticfiles'
 STATICFILES_DIRS = [BASE_DIR / 'static']
+
+# Progressive Web App: keep only the public offline page and static assets in
+# the service-worker cache. Task and account pages must always use the network.
+PWA_APP_NAME = 'Hangarin'
+PWA_APP_DESCRIPTION = 'A shared workspace for tasks, notes, and next steps.'
+PWA_APP_THEME_COLOR = '#0b1f33'
+PWA_APP_BACKGROUND_COLOR = '#f4f7fa'
+PWA_APP_DISPLAY = 'standalone'
+PWA_APP_SCOPE = '/'
+PWA_APP_START_URL = '/'
+PWA_APP_ORIENTATION = 'any'
+PWA_APP_STATUS_BAR_COLOR = 'default'
+PWA_APP_DIR = 'ltr'
+PWA_APP_ICONS = [
+    {'src': '/static/tasks/img/icon-192.png', 'sizes': '192x192', 'type': 'image/png'},
+    {'src': '/static/tasks/img/icon-512.png', 'sizes': '512x512', 'type': 'image/png'},
+]
+PWA_APP_ICONS_APPLE = PWA_APP_ICONS
+PWA_APP_SPLASH_SCREEN = []
+PWA_APP_DEBUG_MODE = False
+PWA_SERVICE_WORKER_PATH = BASE_DIR / 'static' / 'tasks' / 'js' / 'serviceworker.js'
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
